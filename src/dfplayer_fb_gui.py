@@ -115,19 +115,35 @@ def draw_text_center(d, x, y, w, h, text, font, color=(255,255,255)):
     d.text((x + (w-tw)//2, y + (h-th)//2), text, font=font, fill=color)
 
 def draw_ui(note=None):
+    def xywh(rect):
+        x,y,w,h = rect
+        return [x, y, x+w, y+h]
+
     img = Image.new("RGB",(W,H),(15,15,18))
     d = ImageDraw.Draw(img)
+
+    # main buttons
     for label,(x,y,w,h) in buttons.items():
         d.rounded_rectangle([x,y,x+w,y+h], radius=16, fill=(60,170,90))
         draw_text_center(d, x,y,w,h, label, FONTB)
+
+    # volume bar
     x,y,w,h = volbar
     d.rounded_rectangle([x,y,x+w,y+h], radius=8, fill=(60,60,60))
     fillw = int(w*vol/30)
     d.rounded_rectangle([x,y,x+fillw,y+h], radius=8, fill=(200,200,60))
     d.text((x, y+24), f"Vol {vol:02d}", font=FONTM, fill=(230,230,230))
-    d.rounded_rectangle([*BTN_CAL], radius=6, fill=(90,90,140)); draw_text_center(d, *BTN_CAL, "CAL", FONTS)
-    d.rounded_rectangle([*BTN_CFG], radius=6, fill=(90,140,90)); draw_text_center(d, *BTN_CFG, "CFG", FONTS)
-    if note: d.text((6, H-22), note, font=FONTS, fill=(210,210,210))
+
+    # top buttons (use xywh -> xyxy)
+    d.rounded_rectangle(xywh(BTN_CAL), radius=6, fill=(90,90,140))
+    draw_text_center(d, *BTN_CAL, "CAL", FONTS)
+
+    d.rounded_rectangle(xywh(BTN_CFG), radius=6, fill=(90,140,90))
+    draw_text_center(d, *BTN_CFG, "CFG", FONTS)
+
+    if note:
+        d.text((6, H-22), note, font=FONTS, fill=(210,210,210))
+
     push(img)
 
 def inside(rect, px, py):
