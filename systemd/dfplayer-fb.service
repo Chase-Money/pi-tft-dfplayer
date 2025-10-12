@@ -1,0 +1,12 @@
+[Unit]
+Description=DFPlayer Touch GUI (direct framebuffer)
+After=multi-user.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/bin/python3 /home/chase/pi-tft-dfplayer/src/dfplayer_fb_gui.py
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

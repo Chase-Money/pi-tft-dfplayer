@@ -1,0 +1,1 @@
+SUBSYSTEM=="input", ATTRS{name}=="*XPT2046*|*ADS7846*", ENV{DEVNAME}=="*/event*", SYMLINK+="input/touchscreen"
