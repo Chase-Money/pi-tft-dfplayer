@@ -38,6 +38,143 @@ def send(cmd, p1=0, p2=1):
     ser.write(pkt)
 def vol_set(v): v = max(0, min(30, int(v))); send(0x06,0,v)
 
+# ---- Track catalog + panel geometry ----
+CATALOG_FALLBACK_COUNT = 30
+TRACK_HEADER_HEIGHT = 44
+TRACK_ROW_HEIGHT = 32
+TRACK_SCROLL_BTN_W = 40
+TRACK_PANEL = (240, 50, max(180, W-260), max(130, H-70))
+
+def _catalog_paths():
+    env_path = os.environ.get("DFPLAYER_TRACK_CATALOG")
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    return [
+        env_path,
+        os.path.join(base_dir, "config", "track_catalog.txt"),
+        "/home/pi/dfplayer_tracks.txt",
+    ]
+
+def load_track_catalog():
+    for path in _catalog_paths():
+        if not path:
+            continue
+        try:
+            if not os.path.exists(path):
+                continue
+        except Exception:
+            continue
+        tracks = []
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    if "|" in line:
+                        num_str, title = line.split("|", 1)
+                    else:
+                        parts = line.split(None, 1)
+                        if parts:
+                            num_str = parts[0]
+                            title = parts[1] if len(parts) > 1 else ""
+                        else:
+                            continue
+                    try:
+                        track_no = int(num_str, 10)
+                    except ValueError:
+                        continue
+                    title = title.strip() or f"Track {track_no:03d}"
+                    tracks.append(dict(number=track_no, title=title))
+        except Exception:
+            tracks = []
+        if tracks:
+            tracks.sort(key=lambda t: t["number"])
+            return tracks
+    return [dict(number=i+1, title=f"Track {i+1:03d}") for i in range(CATALOG_FALLBACK_COUNT)]
+
+tracks = load_track_catalog()
+track_scroll = 0
+selected_track_idx = 0 if tracks else None
+now_playing_idx = None
+
+def track_list_rect():
+    tx, ty, tw, th = TRACK_PANEL
+    list_x = tx + 10
+    list_y = ty + TRACK_HEADER_HEIGHT
+    list_w = max(40, tw - TRACK_SCROLL_BTN_W - 24)
+    list_h = max(24, th - TRACK_HEADER_HEIGHT - 16)
+    return list_x, list_y, list_w, list_h
+
+def track_scroll_button_rects():
+    tx, ty, tw, th = TRACK_PANEL
+    list_x, list_y, list_w, list_h = track_list_rect()
+    scroll_x = list_x + list_w + 8
+    up_rect = (scroll_x, list_y, TRACK_SCROLL_BTN_W, 36)
+    down_rect = (scroll_x, list_y + list_h - 36, TRACK_SCROLL_BTN_W, 36)
+    return up_rect, down_rect
+
+def track_visible_count():
+    _, _, _, list_h = track_list_rect()
+    return max(1, list_h // TRACK_ROW_HEIGHT)
+
+def ensure_track_scroll_bounds():
+    global track_scroll
+    visible = track_visible_count()
+    max_scroll = max(0, len(tracks) - visible)
+    if track_scroll > max_scroll:
+        track_scroll = max_scroll
+    if track_scroll < 0:
+        track_scroll = 0
+    return visible
+
+def ensure_track_visible(idx):
+    global track_scroll
+    visible = ensure_track_scroll_bounds()
+    if idx < track_scroll:
+        track_scroll = idx
+    elif idx >= track_scroll + visible:
+        track_scroll = idx - visible + 1
+    ensure_track_scroll_bounds()
+
+def track_label(track):
+    return f"{track['number']:03d} {track['title']}"
+
+def play_track_number(track_number):
+    hi = (track_number >> 8) & 0xFF
+    lo = track_number & 0xFF
+    send(0x03, hi, lo)
+
+def play_track_index(idx, note=None):
+    global selected_track_idx, now_playing_idx
+    if not tracks:
+        draw_ui("No tracks available")
+        return
+    idx = max(0, min(len(tracks) - 1, idx))
+    selected_track_idx = idx
+    now_playing_idx = idx
+    ensure_track_visible(idx)
+    track = tracks[idx]
+    play_track_number(track["number"])
+    if note is None:
+        note = f"Playing {track_label(track)}"
+    draw_ui(note)
+
+def advance_track(delta):
+    if not tracks:
+        return False
+    global selected_track_idx
+    if selected_track_idx is None:
+        selected_track_idx = 0 if delta >= 0 else len(tracks) - 1
+    else:
+        selected_track_idx = max(0, min(len(tracks) - 1, selected_track_idx + delta))
+    play_track_index(selected_track_idx)
+    return True
+
+def stop_playback(note=None):
+    global now_playing_idx
+    now_playing_idx = None
+    draw_ui(note)
+
 # ---- Touch device ----
 def open_touch():
     if os.path.exists("/dev/input/touchscreen"):
@@ -100,14 +237,24 @@ except Exception:
 
 buttons = {
     "Play": (20,  20, 200, 90),
-    "Prev": (260, 20, 90,  90),
-    "Next": (360, 20, 90,  90),
-    "Stop": (20, 130, 200, 80),
+    "Stop": (20, 120, 200, 70),
+    "Prev": (20, 200, 90,  70),
+    "Next": (130, 200, 90,  70),
 }
-volbar = (260, 130, 190, 20)
+volbar = (20, 250, 200, 20)
 vol = 18
 BTN_CAL = (4, 4, 52, 30)             # top-left  CAL
 BTN_CFG = (W-56, 4, 52, 30)          # top-right CFG
+
+def font_line_height(font):
+    try:
+        bbox = font.getbbox("Ay")
+        return bbox[3] - bbox[1]
+    except Exception:
+        try:
+            return font.getsize("Ay")[1]
+        except Exception:
+            return 20
 
 def draw_text_center(d, x, y, w, h, text, font, color=(255,255,255)):
     x0,y0,x1,y1 = d.textbbox((0,0), text, font=font)
@@ -115,6 +262,8 @@ def draw_text_center(d, x, y, w, h, text, font, color=(255,255,255)):
     d.text((x + (w-tw)//2, y + (h-th)//2), text, font=font, fill=color)
 
 def draw_ui(note=None):
+    global track_scroll
+
     def xywh(rect):
         x,y,w,h = rect
         return [x, y, x+w, y+h]
@@ -140,6 +289,55 @@ def draw_ui(note=None):
 
     d.rounded_rectangle(xywh(BTN_CFG), radius=6, fill=(90,140,90))
     draw_text_center(d, *BTN_CFG, "CFG", FONTS)
+
+    # track list panel
+    tx, ty, tw, th = TRACK_PANEL
+    d.rounded_rectangle([tx, ty, tx+tw, ty+th], radius=16, fill=(28,30,36))
+    d.text((tx + 14, ty + 8), "Tracks", font=FONTM, fill=(225,225,225))
+    if now_playing_idx is not None and 0 <= now_playing_idx < len(tracks):
+        status = track_label(tracks[now_playing_idx])
+        d.text((tx + 14, ty + 8 + font_line_height(FONTM) + 2), f"Now playing: {status}", font=FONTS, fill=(200,200,200))
+    list_x, list_y, list_w, list_h = track_list_rect()
+    up_rect, down_rect = track_scroll_button_rects()
+    visible = ensure_track_scroll_bounds()
+    max_scroll = max(0, len(tracks) - visible)
+
+    # draw rows
+    if tracks:
+        for i in range(visible):
+            idx = track_scroll + i
+            if idx >= len(tracks):
+                break
+            row_y = list_y + i * TRACK_ROW_HEIGHT
+            row_h = TRACK_ROW_HEIGHT - 6
+            row_rect = (list_x, row_y, list_w, row_h)
+            fill = (45,48,60)
+            text_color = (220,220,220)
+            label = track_label(tracks[idx])
+            if idx == now_playing_idx:
+                fill = (190,140,40)
+                text_color = (25,25,25)
+                label = f"▶ {label}"
+            elif idx == selected_track_idx:
+                fill = (80,100,160)
+            d.rounded_rectangle([row_rect[0], row_rect[1], row_rect[0]+row_rect[2], row_rect[1]+row_rect[3]], radius=10, fill=fill)
+            draw_text_center(d, *row_rect, label, FONTS, color=text_color)
+    else:
+        d.text((list_x, list_y + 6), "No tracks found", font=FONTS, fill=(210,210,210))
+
+    # scroll buttons
+    up_fill = (90,90,110) if track_scroll > 0 else (55,55,70)
+    down_fill = (90,90,110) if track_scroll < max_scroll else (55,55,70)
+    up_color = (235,235,235) if track_scroll > 0 else (130,130,130)
+    down_color = (235,235,235) if track_scroll < max_scroll else (130,130,130)
+    d.rounded_rectangle(xywh(up_rect), radius=10, fill=up_fill)
+    d.rounded_rectangle(xywh(down_rect), radius=10, fill=down_fill)
+    ux, uy, uw, uh = up_rect
+    dx, dy, dw, dh = down_rect
+    up_arrow = [(ux + uw/2, uy + 8), (ux + uw - 10, uy + uh - 8), (ux + 10, uy + uh - 8)]
+    down_arrow = [(dx + 10, dy + 8), (dx + dw - 10, dy + 8), (dx + dw/2, dy + dh - 8)]
+    d.polygon(up_arrow, fill=up_color)
+    d.polygon(down_arrow, fill=down_color)
 
     if note:
         d.text((6, H-22), note, font=FONTS, fill=(210,210,210))
@@ -220,7 +418,7 @@ def quick_calibration():
     draw_ui("Calibrated."); time.sleep(0.6)
 
 def main_loop():
-    global orient_idx, vol
+    global orient_idx, vol, track_scroll, selected_track_idx
     draw_ui(); vol_set(vol)
     touching=False; drag_vol=False
     raw_bufx,raw_bufy=[],[]
@@ -250,14 +448,58 @@ def main_loop():
                     if inside(BTN_CAL, px, py):
                         quick_calibration(); draw_ui(); continue
 
+                    list_rect = track_list_rect()
+                    up_rect, down_rect = track_scroll_button_rects()
+                    if inside(up_rect, px, py):
+                        if track_scroll > 0:
+                            track_scroll -= 1
+                            ensure_track_scroll_bounds()
+                            draw_ui()
+                        continue
+                    if inside(down_rect, px, py):
+                        visible = ensure_track_scroll_bounds()
+                        max_scroll = max(0, len(tracks) - visible)
+                        if track_scroll < max_scroll:
+                            track_scroll += 1
+                            ensure_track_scroll_bounds()
+                            draw_ui()
+                        continue
+                    if inside(list_rect, px, py):
+                        if tracks:
+                            row = (py - list_rect[1]) // TRACK_ROW_HEIGHT
+                            visible = track_visible_count()
+                            if 0 <= row < visible:
+                                idx = track_scroll + int(row)
+                                if idx < len(tracks):
+                                    play_track_index(idx)
+                        else:
+                            draw_ui()
+                        continue
+
+                    handled=False
                     for label,(x,y,w,h) in buttons.items():
                         if inside((x,y,w,h), px, py):
-                            if   label=="Play": send(0x0F,0,1)
-                            elif label=="Prev": send(0x02)
-                            elif label=="Next": send(0x01)
-                            elif label=="Stop": send(0x16)
-                            draw_ui()
-                            break
+                            if label == "Play":
+                                if tracks:
+                                    target = selected_track_idx if selected_track_idx is not None else 0
+                                    play_track_index(target)
+                                else:
+                                    send(0x0F,0,1); draw_ui()
+                                handled=True; break
+                            elif label == "Prev":
+                                if not advance_track(-1):
+                                    send(0x02); draw_ui()
+                                handled=True; break
+                            elif label == "Next":
+                                if not advance_track(1):
+                                    send(0x01); draw_ui()
+                                handled=True; break
+                            elif label == "Stop":
+                                send(0x16)
+                                stop_playback("Stopped")
+                                handled=True; break
+                    if handled:
+                        continue
                     x,y,w,h = volbar
                     if inside((x,y,w,h), px, py):
                         drag_vol=True
