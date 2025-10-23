@@ -26,7 +26,7 @@ ORIENTS = [
     dict(SWAP_XY=True , FLIP_X=True , FLIP_Y=True ),
 ]
 orient_idx = 6  # good first guess for your rotated panel
-CAL_PATH = "/home/chase/.touch_cal.txt"
+CAL_PATH = os.path.expanduser("~/.touch_cal.txt")
 cal_raw = None  # (minx, maxx, miny, maxy)
 
 # ---- DFPlayer on UART0 (/dev/serial0) ----
@@ -214,6 +214,9 @@ def quick_calibration():
     bot_y   = int(statistics.median([inv[2][1], inv[3][1]]))
     if right_x <= left_x: right_x = left_x + 1
     if bot_y   <= top_y : bot_y   = top_y  + 1
+    cal_dir = os.path.dirname(CAL_PATH)
+    if cal_dir and not os.path.exists(cal_dir):
+        os.makedirs(cal_dir, exist_ok=True)
     with open(CAL_PATH,"w") as f:
         f.write(f"{left_x} {right_x} {top_y} {bot_y}\n")
     cal_raw = (left_x, right_x, top_y, bot_y)
