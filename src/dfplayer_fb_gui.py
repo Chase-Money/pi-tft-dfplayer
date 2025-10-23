@@ -108,6 +108,7 @@ volbar = (260, 130, 190, 20)
 vol = 18
 BTN_CAL = (4, 4, 52, 30)             # top-left  CAL
 BTN_CFG = (W-56, 4, 52, 30)          # top-right CFG
+playback_playing = False
 
 def draw_text_center(d, x, y, w, h, text, font, color=(255,255,255)):
     x0,y0,x1,y1 = d.textbbox((0,0), text, font=font)
@@ -125,7 +126,11 @@ def draw_ui(note=None):
     # main buttons
     for label,(x,y,w,h) in buttons.items():
         d.rounded_rectangle([x,y,x+w,y+h], radius=16, fill=(60,170,90))
-        draw_text_center(d, x,y,w,h, label, FONTB)
+        if label == "Play" and playback_playing:
+            display_label = "Pause"
+        else:
+            display_label = label
+        draw_text_center(d, x,y,w,h, display_label, FONTB)
 
     # volume bar
     x,y,w,h = volbar
@@ -220,7 +225,7 @@ def quick_calibration():
     draw_ui("Calibrated."); time.sleep(0.6)
 
 def main_loop():
-    global orient_idx, vol
+    global orient_idx, vol, playback_playing
     draw_ui(); vol_set(vol)
     touching=False; drag_vol=False
     raw_bufx,raw_bufy=[],[]
@@ -252,10 +257,22 @@ def main_loop():
 
                     for label,(x,y,w,h) in buttons.items():
                         if inside((x,y,w,h), px, py):
-                            if   label=="Play": send(0x0F,0,1)
-                            elif label=="Prev": send(0x02)
-                            elif label=="Next": send(0x01)
-                            elif label=="Stop": send(0x16)
+                            if label=="Play":
+                                if playback_playing:
+                                    send(0x0E)
+                                    playback_playing = False
+                                else:
+                                    send(0x0D)
+                                    playback_playing = True
+                            elif label=="Prev":
+                                send(0x02)
+                                playback_playing = True
+                            elif label=="Next":
+                                send(0x01)
+                                playback_playing = True
+                            elif label=="Stop":
+                                send(0x16)
+                                playback_playing = False
                             draw_ui()
                             break
                     x,y,w,h = volbar
