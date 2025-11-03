@@ -5,7 +5,8 @@ After=multi-user.target
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/bin/python3 /home/chase/pi-tft-dfplayer/src/dfplayer_fb_gui.py
+WorkingDirectory=/home/pi/pi-tft-dfplayer
+ExecStart=/usr/bin/python3 src/dfplayer_fb_gui.py
 Restart=on-failure
 
 [Install]

@@ -26,7 +26,7 @@ ORIENTS = [
     dict(SWAP_XY=True , FLIP_X=True , FLIP_Y=True ),
 ]
 orient_idx = 6  # good first guess for your rotated panel
-CAL_PATH = "/home/chase/.touch_cal.txt"
+CAL_PATH = os.path.expanduser("~/.touch_cal.txt")
 cal_raw = None  # (minx, maxx, miny, maxy)
 
 # ---- DFPlayer on UART0 (/dev/serial0) ----
@@ -245,6 +245,7 @@ volbar = (20, 250, 200, 20)
 vol = 18
 BTN_CAL = (4, 4, 52, 30)             # top-left  CAL
 BTN_CFG = (W-56, 4, 52, 30)          # top-right CFG
+playback_playing = False
 
 def font_line_height(font):
     try:
@@ -274,7 +275,11 @@ def draw_ui(note=None):
     # main buttons
     for label,(x,y,w,h) in buttons.items():
         d.rounded_rectangle([x,y,x+w,y+h], radius=16, fill=(60,170,90))
-        draw_text_center(d, x,y,w,h, label, FONTB)
+        if label == "Play" and playback_playing:
+            display_label = "Pause"
+        else:
+            display_label = label
+        draw_text_center(d, x,y,w,h, display_label, FONTB)
 
     # volume bar
     x,y,w,h = volbar
@@ -412,6 +417,9 @@ def quick_calibration():
     bot_y   = int(statistics.median([inv[2][1], inv[3][1]]))
     if right_x <= left_x: right_x = left_x + 1
     if bot_y   <= top_y : bot_y   = top_y  + 1
+    cal_dir = os.path.dirname(CAL_PATH)
+    if cal_dir and not os.path.exists(cal_dir):
+        os.makedirs(cal_dir, exist_ok=True)
     with open(CAL_PATH,"w") as f:
         f.write(f"{left_x} {right_x} {top_y} {bot_y}\n")
     cal_raw = (left_x, right_x, top_y, bot_y)
@@ -419,6 +427,7 @@ def quick_calibration():
 
 def main_loop():
     global orient_idx, vol, track_scroll, selected_track_idx
+    global orient_idx, vol, playback_playing
     draw_ui(); vol_set(vol)
     touching=False; drag_vol=False
     raw_bufx,raw_bufy=[],[]
@@ -500,6 +509,24 @@ def main_loop():
                                 handled=True; break
                     if handled:
                         continue
+                            if label=="Play":
+                                if playback_playing:
+                                    send(0x0E)
+                                    playback_playing = False
+                                else:
+                                    send(0x0D)
+                                    playback_playing = True
+                            elif label=="Prev":
+                                send(0x02)
+                                playback_playing = True
+                            elif label=="Next":
+                                send(0x01)
+                                playback_playing = True
+                            elif label=="Stop":
+                                send(0x16)
+                                playback_playing = False
+                            draw_ui()
+                            break
                     x,y,w,h = volbar
                     if inside((x,y,w,h), px, py):
                         drag_vol=True

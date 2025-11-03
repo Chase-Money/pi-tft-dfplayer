@@ -73,6 +73,11 @@ sudo cp systemd/dfplayer-fb.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now dfplayer-fb
 
+> **Note:** The systemd unit expects this repository to live at
+> `/home/pi/pi-tft-dfplayer`. If you clone it elsewhere, update
+> `WorkingDirectory` in `systemd/dfplayer-fb.service` (or create a drop-in) so
+> the service can locate `src/dfplayer_fb_gui.py`.
+
 Using the UI
 	•	CFG cycles through 8 orientation combos (swap/flip).
 	•	CAL shows 4 crosshairs—tap and hold ~0.5 s on each.
