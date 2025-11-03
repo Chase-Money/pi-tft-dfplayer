@@ -148,6 +148,7 @@ def step_track(delta):
     else:
         current_track_number = max(1, current_track_number + delta)
     update_artwork_cache()
+    sync_track_selection_from_current()
 
 def set_track(track_no):
     global current_track_idx, current_track_number
@@ -159,6 +160,7 @@ def set_track(track_no):
         except ValueError:
             pass
     update_artwork_cache()
+    sync_track_selection_from_current()
 # ---- Track catalog + panel geometry ----
 CATALOG_FALLBACK_COUNT = 30
 TRACK_HEADER_HEIGHT = 44
@@ -218,6 +220,18 @@ track_scroll = 0
 selected_track_idx = 0 if tracks else None
 now_playing_idx = None
 
+def sync_track_selection_from_current(mark_playing=False):
+    global selected_track_idx, now_playing_idx
+    if not tracks or current_track_number is None:
+        return
+    for idx, track in enumerate(tracks):
+        if track["number"] == current_track_number:
+            selected_track_idx = idx
+            if mark_playing:
+                now_playing_idx = idx
+            ensure_track_visible(idx)
+            break
+
 def track_list_rect():
     tx, ty, tw, th = TRACK_PANEL
     list_x = tx + 10
@@ -261,9 +275,13 @@ def track_label(track):
     return f"{track['number']:03d} {track['title']}"
 
 def play_track_number(track_number):
+    global playback_playing
+    set_track(track_number)
     hi = (track_number >> 8) & 0xFF
     lo = track_number & 0xFF
-    send(0x03, hi, lo)
+    send(0x0F, hi, lo)
+    playback_playing = True
+    sync_track_selection_from_current(mark_playing=True)
 
 def play_track_index(idx, note=None):
     global selected_track_idx, now_playing_idx
@@ -292,8 +310,9 @@ def advance_track(delta):
     return True
 
 def stop_playback(note=None):
-    global now_playing_idx
+    global now_playing_idx, playback_playing
     now_playing_idx = None
+    playback_playing = False
     draw_ui(note)
 
 # ---- Touch device ----
@@ -358,11 +377,6 @@ except Exception:
 
 buttons = {
     "Play": (20,  20, 200, 90),
-    "Prev": (20, 120, 95,  80),
-    "Next": (125, 120, 95,  80),
-    "Stop": (20, 210, 200, 60),
-}
-volbar = (20, 280, 200, 18)
     "Stop": (20, 120, 200, 70),
     "Prev": (20, 200, 90,  70),
     "Next": (130, 200, 90,  70),
@@ -603,11 +617,10 @@ def quick_calibration():
     draw_ui("Calibrated."); time.sleep(0.6)
 
 def main_loop():
-    global orient_idx, vol
-    ensure_track_selected(); draw_ui(); vol_set(vol)
-    global orient_idx, vol, track_scroll, selected_track_idx
-    global orient_idx, vol, playback_playing
-    draw_ui(); vol_set(vol)
+    global orient_idx, vol, track_scroll, selected_track_idx, playback_playing
+    ensure_track_selected()
+    draw_ui()
+    vol_set(vol)
     touching=False; drag_vol=False
     raw_bufx,raw_bufy=[],[]
     last_drag=0.0
@@ -667,57 +680,43 @@ def main_loop():
                     handled=False
                     for label,(x,y,w,h) in buttons.items():
                         if inside((x,y,w,h), px, py):
-                            if label=="Play":
-                                ensure_track_selected()
-                                set_track(current_track_number or 1)
-                                send(0x0F,0,1)
-                            elif label=="Prev":
-                                step_track(-1)
-                                send(0x02)
-                            elif label=="Next":
-                                step_track(1)
-                                send(0x01)
-                            elif label=="Stop":
-                                send(0x16)
+                            handled = True
                             if label == "Play":
-                                if tracks:
-                                    target = selected_track_idx if selected_track_idx is not None else 0
-                                    play_track_index(target)
-                                else:
-                                    send(0x0F,0,1); draw_ui()
-                                handled=True; break
-                            elif label == "Prev":
-                                if not advance_track(-1):
-                                    send(0x02); draw_ui()
-                                handled=True; break
-                            elif label == "Next":
-                                if not advance_track(1):
-                                    send(0x01); draw_ui()
-                                handled=True; break
-                            elif label == "Stop":
-                                send(0x16)
-                                stop_playback("Stopped")
-                                handled=True; break
-                    if handled:
-                        continue
-                            if label=="Play":
                                 if playback_playing:
                                     send(0x0E)
                                     playback_playing = False
+                                    draw_ui("Paused")
                                 else:
-                                    send(0x0D)
+                                    if now_playing_idx is not None:
+                                        send(0x0D)
+                                        playback_playing = True
+                                        draw_ui("Resumed")
+                                    elif tracks:
+                                        target = selected_track_idx if selected_track_idx is not None else 0
+                                        play_track_index(target)
+                                    else:
+                                        ensure_track_selected()
+                                        track_no = current_track_number or 1
+                                        play_track_number(track_no)
+                                        draw_ui(f"Playing Track {track_no:04d}")
+                            elif label == "Prev":
+                                if not (tracks and advance_track(-1)):
+                                    step_track(-1)
                                     playback_playing = True
-                            elif label=="Prev":
-                                send(0x02)
-                                playback_playing = True
-                            elif label=="Next":
-                                send(0x01)
-                                playback_playing = True
-                            elif label=="Stop":
+                                    send(0x02)
+                                    draw_ui()
+                            elif label == "Next":
+                                if not (tracks and advance_track(1)):
+                                    step_track(1)
+                                    playback_playing = True
+                                    send(0x01)
+                                    draw_ui()
+                            elif label == "Stop":
                                 send(0x16)
-                                playback_playing = False
-                            draw_ui()
+                                stop_playback("Stopped")
                             break
+                    if handled:
+                        continue
                     x,y,w,h = volbar
                     if inside((x,y,w,h), px, py):
                         drag_vol=True
