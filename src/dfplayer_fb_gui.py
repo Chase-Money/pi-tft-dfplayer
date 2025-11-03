@@ -1,3 +1,4 @@
+import json
 import os, sys, time, mmap, serial, statistics
 from PIL import Image, ImageDraw, ImageFont
 from evdev import InputDevice, ecodes, list_devices
@@ -14,6 +15,9 @@ def get_fb_size(fb):
 
 W, H = get_fb_size(FB)
 
+METADATA_PATH = os.environ.get("DFPLAYER_METADATA", "/boot/dfplayer_metadata.json")
+ART_ROOT = os.environ.get("DFPLAYER_ART_ROOT")
+
 # 8 orientation combos we can cycle through
 ORIENTS = [
     dict(SWAP_XY=False, FLIP_X=False, FLIP_Y=False),
@@ -29,6 +33,62 @@ orient_idx = 6  # good first guess for your rotated panel
 CAL_PATH = os.path.expanduser("~/.touch_cal.txt")
 cal_raw = None  # (minx, maxx, miny, maxy)
 
+# ---- Track metadata & artwork ----
+metadata = {}
+track_numbers = []
+current_track_idx = None
+current_track_number = None
+current_art_thumb = None
+current_art_path = None
+artwork_cache = {}
+
+ART_RECT = (260, 20, 200, 200)
+INFO_RECT = (260, 230, 200, 72)
+
+def metadata_dir():
+    if os.path.isdir(METADATA_PATH):
+        return METADATA_PATH
+    return os.path.dirname(METADATA_PATH) or "."
+
+def load_metadata():
+    global metadata, track_numbers
+    base_dir = metadata_dir()
+    try:
+        with open(METADATA_PATH, "r", encoding="utf-8") as f:
+            loaded = json.load(f)
+        tracks = loaded.get("tracks") if isinstance(loaded, dict) else None
+        if tracks is None:
+            tracks = loaded if isinstance(loaded, dict) else {}
+    except Exception:
+        metadata = {}
+        track_numbers = []
+        return
+
+    parsed = {}
+    for key, info in tracks.items():
+        try:
+            track_no = int(key)
+        except Exception:
+            continue
+        if not isinstance(info, dict):
+            info = {}
+        entry = {
+            "title": info.get("title"),
+            "artist": info.get("artist"),
+            "artwork": None,
+        }
+        art_path = info.get("artwork")
+        if art_path:
+            if not os.path.isabs(art_path):
+                entry["artwork"] = os.path.join(ART_ROOT or base_dir, art_path)
+            else:
+                entry["artwork"] = art_path
+        parsed[track_no] = entry
+    metadata = parsed
+    track_numbers = sorted(parsed.keys())
+
+load_metadata()
+
 # ---- DFPlayer on UART0 (/dev/serial0) ----
 ser = serial.Serial('/dev/serial0', 9600, timeout=0.1)
 def send(cmd, p1=0, p2=1):
@@ -38,6 +98,67 @@ def send(cmd, p1=0, p2=1):
     ser.write(pkt)
 def vol_set(v): v = max(0, min(30, int(v))); send(0x06,0,v)
 
+def ensure_track_selected():
+    global current_track_idx, current_track_number
+    if current_track_number is not None:
+        return
+    if track_numbers:
+        current_track_idx = 0
+        current_track_number = track_numbers[0]
+    else:
+        current_track_number = 1
+    update_artwork_cache()
+
+def update_artwork_cache():
+    global current_art_thumb, current_art_path
+    meta = metadata.get(current_track_number, {}) if current_track_number else {}
+    art_path = meta.get("artwork") if isinstance(meta, dict) else None
+    if art_path == current_art_path:
+        return
+    current_art_path = art_path
+    current_art_thumb = None
+    if not art_path:
+        return
+    if art_path in artwork_cache:
+        current_art_thumb = artwork_cache[art_path]
+        return
+    try:
+        with Image.open(art_path) as im:
+            im = im.convert("RGB")
+            thumb = im.copy()
+            thumb.thumbnail((ART_RECT[2], ART_RECT[3]), Image.LANCZOS)
+    except Exception:
+        artwork_cache[art_path] = None
+        return
+    canvas = Image.new("RGB", (ART_RECT[2], ART_RECT[3]), (35, 35, 40))
+    ox = (canvas.width - thumb.width)//2
+    oy = (canvas.height - thumb.height)//2
+    canvas.paste(thumb, (ox, oy))
+    artwork_cache[art_path] = canvas
+    current_art_thumb = canvas
+
+def step_track(delta):
+    global current_track_idx, current_track_number
+    ensure_track_selected()
+    if track_numbers:
+        if current_track_idx is None:
+            current_track_idx = 0
+        current_track_idx = (current_track_idx + delta) % len(track_numbers)
+        current_track_number = track_numbers[current_track_idx]
+    else:
+        current_track_number = max(1, current_track_number + delta)
+    update_artwork_cache()
+
+def set_track(track_no):
+    global current_track_idx, current_track_number
+    ensure_track_selected()
+    current_track_number = max(1, int(track_no))
+    if track_numbers:
+        try:
+            current_track_idx = track_numbers.index(current_track_number)
+        except ValueError:
+            pass
+    update_artwork_cache()
 # ---- Track catalog + panel geometry ----
 CATALOG_FALLBACK_COUNT = 30
 TRACK_HEADER_HEIGHT = 44
@@ -237,6 +358,11 @@ except Exception:
 
 buttons = {
     "Play": (20,  20, 200, 90),
+    "Prev": (20, 120, 95,  80),
+    "Next": (125, 120, 95,  80),
+    "Stop": (20, 210, 200, 60),
+}
+volbar = (20, 280, 200, 18)
     "Stop": (20, 120, 200, 70),
     "Prev": (20, 200, 90,  70),
     "Next": (130, 200, 90,  70),
@@ -262,7 +388,36 @@ def draw_text_center(d, x, y, w, h, text, font, color=(255,255,255)):
     tw,th = x1-x0, y1-y0
     d.text((x + (w-tw)//2, y + (h-th)//2), text, font=font, fill=color)
 
+def draw_wrapped_text(d, text, font, x, y, max_width, fill, line_spacing=4):
+    if not text:
+        return y
+    ascent, descent = font.getmetrics() if hasattr(font, "getmetrics") else (font.size, 0)
+    line_height = ascent + descent + line_spacing
+    line = ""
+    for word in text.split():
+        candidate = word if not line else f"{line} {word}"
+        try:
+            width = d.textlength(candidate, font=font)
+        except AttributeError:
+            x0, _, x1, _ = d.textbbox((0, 0), candidate, font=font)
+            width = x1 - x0
+        if width <= max_width or not line:
+            line = candidate
+        else:
+            d.text((x, y), line, font=font, fill=fill)
+            y += line_height
+            line = word
+    if line:
+        d.text((x, y), line, font=font, fill=fill)
+        y += line_height
+    return y
+
+def current_track_meta():
+    ensure_track_selected()
+    return metadata.get(current_track_number, {}) if current_track_number else {}
+
 def draw_ui(note=None):
+    ensure_track_selected()
     global track_scroll
 
     def xywh(rect):
@@ -287,6 +442,28 @@ def draw_ui(note=None):
     fillw = int(w*vol/30)
     d.rounded_rectangle([x,y,x+fillw,y+h], radius=8, fill=(200,200,60))
     d.text((x, y+24), f"Vol {vol:02d}", font=FONTM, fill=(230,230,230))
+
+    # artwork region
+    ax, ay, aw, ah = ART_RECT
+    d.rounded_rectangle([ax, ay, ax+aw, ay+ah], radius=18, fill=(35,35,40))
+    if current_art_thumb:
+        img.paste(current_art_thumb, (ax, ay))
+    else:
+        d.text((ax + 24, ay + ah//2 - 10), "No artwork", font=FONTS, fill=(150,150,150))
+
+    # metadata region
+    ix, iy, iw, ih = INFO_RECT
+    d.rounded_rectangle([ix, iy, ix+iw, iy+ih], radius=12, fill=(40,40,55))
+    meta = current_track_meta()
+    title = meta.get("title") if isinstance(meta, dict) else None
+    if not title:
+        title = f"Track {current_track_number:04d}" if current_track_number else "Track"
+    artist = meta.get("artist") if isinstance(meta, dict) else None
+    if not artist:
+        artist = "Unknown Artist"
+    next_y = draw_wrapped_text(d, title, FONTM, ix+12, iy+8, iw-24, fill=(235,235,235))
+    draw_wrapped_text(d, artist, FONTS, ix+12, max(next_y, iy+44), iw-24, fill=(190,190,190))
+    d.text((ix+12, iy+ih-24), f"#{current_track_number:04d}" if current_track_number else "#----", font=FONTS, fill=(170,170,170))
 
     # top buttons (use xywh -> xyxy)
     d.rounded_rectangle(xywh(BTN_CAL), radius=6, fill=(90,90,140))
@@ -426,6 +603,8 @@ def quick_calibration():
     draw_ui("Calibrated."); time.sleep(0.6)
 
 def main_loop():
+    global orient_idx, vol
+    ensure_track_selected(); draw_ui(); vol_set(vol)
     global orient_idx, vol, track_scroll, selected_track_idx
     global orient_idx, vol, playback_playing
     draw_ui(); vol_set(vol)
@@ -488,6 +667,18 @@ def main_loop():
                     handled=False
                     for label,(x,y,w,h) in buttons.items():
                         if inside((x,y,w,h), px, py):
+                            if label=="Play":
+                                ensure_track_selected()
+                                set_track(current_track_number or 1)
+                                send(0x0F,0,1)
+                            elif label=="Prev":
+                                step_track(-1)
+                                send(0x02)
+                            elif label=="Next":
+                                step_track(1)
+                                send(0x01)
+                            elif label=="Stop":
+                                send(0x16)
                             if label == "Play":
                                 if tracks:
                                     target = selected_track_idx if selected_track_idx is not None else 0
