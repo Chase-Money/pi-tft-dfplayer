@@ -2,8 +2,7 @@ import json
 import os, sys, time, mmap, serial, statistics
 from PIL import Image, ImageDraw, ImageFont
 from evdev import InputDevice, ecodes, list_devices
-
-FB = "/dev/fb1"
+FB = next((p for p in ("/dev/fb1","/dev/fb0") if os.path.exists(p)), "/dev/fb0")
 
 def get_fb_size(fb):
     try:
@@ -29,7 +28,8 @@ ORIENTS = [
     dict(SWAP_XY=True , FLIP_X=False, FLIP_Y=True ),
     dict(SWAP_XY=True , FLIP_X=True , FLIP_Y=True ),
 ]
-orient_idx = 6  # good first guess for your rotated panel
+orient_idx =    4  # good first guess for your rotated panel
+orient_idx = int(os.getenv("ORIENT_IDX", orient_idx))
 CAL_PATH = os.path.expanduser("~/.touch_cal.txt")
 cal_raw = None  # (minx, maxx, miny, maxy)
 
@@ -326,12 +326,12 @@ def open_touch():
             return dev
     devs = list_devices()
     if not devs:
-        raise RuntimeError("No input event devices found")
+        print("WARN: No input event devices found; running without touch."); return None
     return InputDevice(devs[0])
 
 touch = open_touch()
-ax = touch.absinfo(ecodes.ABS_X)
-ay = touch.absinfo(ecodes.ABS_Y)
+ax = None if touch is None else touch.absinfo(ecodes.ABS_X)
+ay = None if touch is None else touch.absinfo(ecodes.ABS_Y)
 if ax is None or ay is None:
     print(f"Touch device lacks ABS axes: {touch.path} {touch.name}", file=sys.stderr); sys.exit(1)
 drv_minx, drv_maxx = ax.min, ax.max
