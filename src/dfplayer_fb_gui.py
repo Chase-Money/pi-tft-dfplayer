@@ -31,7 +31,70 @@ ORIENTS = [
 ]
 orient_idx = 6  # good first guess for your rotated panel
 CAL_PATH = os.path.expanduser("~/.touch_cal.txt")
+TOUCH_CFG_PATH = os.path.expanduser("~/.dfplayer_touch.json")
 cal_raw = None  # (minx, maxx, miny, maxy)
+
+
+def _touch_cfg_dir(path):
+    directory = os.path.dirname(path)
+    if directory and not os.path.exists(directory):
+        os.makedirs(directory, exist_ok=True)
+
+
+def save_touch_settings():
+    """Persist orientation index and calibration values to disk."""
+    data = {}
+    if os.path.exists(TOUCH_CFG_PATH):
+        try:
+            with open(TOUCH_CFG_PATH, "r", encoding="utf-8") as f:
+                existing = json.load(f)
+            if isinstance(existing, dict):
+                data.update(existing)
+        except Exception:
+            data = {}
+    data["orientation_index"] = int(orient_idx)
+    if cal_raw and len(cal_raw) == 4:
+        data["calibration"] = [int(v) for v in cal_raw]
+    else:
+        data.pop("calibration", None)
+    try:
+        _touch_cfg_dir(TOUCH_CFG_PATH)
+        tmp_path = TOUCH_CFG_PATH + ".tmp"
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+        os.replace(tmp_path, TOUCH_CFG_PATH)
+    except Exception:
+        pass
+
+
+def load_touch_settings():
+    """Load persisted orientation and calibration (with legacy support)."""
+    global orient_idx, cal_raw
+    try:
+        with open(TOUCH_CFG_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        data = None
+    if isinstance(data, dict):
+        idx = data.get("orientation_index")
+        if isinstance(idx, int) and 0 <= idx < len(ORIENTS):
+            orient_idx = idx
+        cal = data.get("calibration")
+        if isinstance(cal, (list, tuple)) and len(cal) == 4:
+            try:
+                cal_raw = tuple(int(v) for v in cal)
+            except Exception:
+                cal_raw = None
+    if cal_raw is None and os.path.exists(CAL_PATH):
+        try:
+            with open(CAL_PATH, "r", encoding="utf-8") as f:
+                vals = [int(v) for v in f.read().strip().split()]
+            if len(vals) == 4:
+                cal_raw = tuple(vals)
+        except Exception:
+            pass
+
+load_touch_settings()
 
 # ---- Track metadata & artwork ----
 metadata = {}
@@ -344,15 +407,6 @@ if ax is None or ay is None:
 drv_minx, drv_maxx = ax.min, ax.max
 drv_miny, drv_maxy = ay.min, ay.max
 
-# load saved calibration if present
-if os.path.exists(CAL_PATH):
-    try:
-        with open(CAL_PATH,"r") as f:
-            vals = list(map(int, f.read().strip().split()))
-            if len(vals)==4: cal_raw = tuple(vals)
-    except Exception:
-        pass
-
 def current_ranges():
     return cal_raw if cal_raw else (drv_minx, drv_maxx, drv_miny, drv_maxy)
 
@@ -628,6 +682,7 @@ def quick_calibration():
     with open(CAL_PATH,"w") as f:
         f.write(f"{left_x} {right_x} {top_y} {bot_y}\n")
     cal_raw = (left_x, right_x, top_y, bot_y)
+    save_touch_settings()
     draw_ui("Calibrated."); time.sleep(0.6)
 
 def main_loop():
@@ -657,6 +712,7 @@ def main_loop():
                 if not drag_vol and len(raw_bufx) == 4 and len(raw_bufy) == 4:
                     if inside(BTN_CFG, px, py):
                         orient_idx = (orient_idx + 1) % len(ORIENTS)
+                        save_touch_settings()
                         draw_ui(f"Orientation {orient_idx+1}/8")
                         time.sleep(0.25)
                         continue
