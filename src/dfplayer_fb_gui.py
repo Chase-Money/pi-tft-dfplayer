@@ -31,6 +31,25 @@ ORIENTS = [
 ]
 orient_idx = 6  # good first guess for your rotated panel
 CAL_PATH = os.path.expanduser("~/.touch_cal.txt")
+ORIENT_PATH = os.path.expanduser("~/.touch_orient.txt")
+cal_raw = None  # (minx, maxx, miny, maxy)
+
+
+def load_orientation():
+    global orient_idx
+    try:
+        with open(ORIENT_PATH, "r", encoding="utf-8") as f:
+            idx = int(f.read().strip())
+    except Exception:
+        return
+    if 0 <= idx < len(ORIENTS):
+        orient_idx = idx
+
+
+def save_orientation():
+    try:
+        with open(ORIENT_PATH, "w", encoding="utf-8") as f:
+            f.write(f"{orient_idx}\n")
 TOUCH_CFG_PATH = os.path.expanduser("~/.dfplayer_touch.json")
 cal_raw = None  # (minx, maxx, miny, maxy)
 
@@ -67,6 +86,7 @@ def save_touch_settings():
         pass
 
 
+load_orientation()
 def load_touch_settings():
     """Load persisted orientation and calibration (with legacy support)."""
     global orient_idx, cal_raw
@@ -198,6 +218,33 @@ def update_artwork_cache():
     artwork_cache[art_path] = canvas
     current_art_thumb = canvas
 
+def step_track(delta):
+    global current_track_idx, current_track_number
+    ensure_track_selected()
+    if track_numbers:
+        if current_track_idx is None:
+            current_track_idx = 0
+        current_track_idx = (current_track_idx + delta) % len(track_numbers)
+        current_track_number = track_numbers[current_track_idx]
+    else:
+        current_track_number = max(1, current_track_number + delta)
+    update_artwork_cache()
+
+def set_track(track_no):
+    global current_track_idx, current_track_number, selected_track_idx
+    ensure_track_selected()
+    current_track_number = max(1, int(track_no))
+    if track_numbers:
+        try:
+            current_track_idx = track_numbers.index(current_track_number)
+        except ValueError:
+            pass
+    for idx, info in enumerate(tracks):
+        if info.get("number") == current_track_number:
+            selected_track_idx = idx
+            ensure_track_visible(idx)
+            break
+    update_artwork_cache()
 # ---- Track catalog + panel geometry ----
 CATALOG_FALLBACK_COUNT = 30
 TRACK_HEADER_HEIGHT = 44
@@ -320,6 +367,17 @@ def play_track_number(track_number):
     send(0x03, hi, lo)
 
 def play_track_index(idx, note=None):
+    global selected_track_idx, now_playing_idx, playback_playing
+    if not tracks:
+        draw_ui("No tracks available")
+        return
+    idx = max(0, min(len(tracks) - 1, idx))
+    selected_track_idx = idx
+    now_playing_idx = idx
+    ensure_track_visible(idx)
+    track = tracks[idx]
+    set_track(track["number"])
+    play_track_number(track["number"])
     global now_playing_idx, playback_playing
     track = select_track_index(idx)
     if track is None:
@@ -436,6 +494,13 @@ try:
 except Exception:
     FONTB = ImageFont.load_default(); FONTM = ImageFont.load_default(); FONTS = ImageFont.load_default()
 
+BUTTON_LAYOUT = [
+    ("Play", (20, 20, 200, 80)),
+    ("Stop", (20, 110, 200, 60)),
+    ("Prev", (20, 180, 95, 70)),
+    ("Next", (125, 180, 95, 70)),
+]
+volbar = (20, 260, 200, 22)
 BUTTONS = [
     dict(key="play", rect=(20,  24, 200, 86), fill=(70, 175, 120), text=(255, 255, 255)),
     dict(key="stop", rect=(20, 124, 200, 72), fill=(195, 80, 80), text=(255, 255, 255)),
@@ -503,6 +568,16 @@ def draw_ui(note=None):
     d = ImageDraw.Draw(img)
 
     # main buttons
+    for label, (x, y, w, h) in BUTTON_LAYOUT:
+        if label == "Stop":
+            fill = (180, 70, 70)
+        elif label in ("Prev", "Next"):
+            fill = (70, 100, 170)
+        else:
+            fill = (60, 170, 90)
+        d.rounded_rectangle([x, y, x + w, y + h], radius=16, fill=fill)
+        display_label = "Pause" if label == "Play" and playback_playing else label
+        draw_text_center(d, x, y, w, h, display_label, FONTB)
     for button in BUTTONS:
         x, y, w, h = button["rect"]
         label_key = button["key"]
@@ -612,6 +687,98 @@ def inside(rect, px, py):
     x,y,w,h = rect
     return x<=px<=x+w and y<=py<=y+h
 
+def update_volume_from_x(px):
+    global vol
+    x, y, w, _ = volbar
+    clamped = max(x, min(x + w, px))
+    new_vol = int(round((clamped - x) * 30 / w))
+    new_vol = max(0, min(30, new_vol))
+    if new_vol != vol:
+        vol = new_vol
+        vol_set(vol)
+        draw_ui()
+
+
+def handle_button_press(label):
+    global playback_playing
+    if label == "Play":
+        if playback_playing:
+            send(0x0E)
+            stop_playback("Paused")
+        else:
+            if now_playing_idx is not None and 0 <= now_playing_idx < len(tracks):
+                send(0x0D)
+                playback_playing = True
+                draw_ui("Resumed")
+            elif tracks:
+                target = selected_track_idx if selected_track_idx is not None else 0
+                play_track_index(target)
+            else:
+                ensure_track_selected()
+                send(0x0D)
+                draw_ui("Play")
+    elif label == "Prev":
+        if not advance_track(-1):
+            send(0x02)
+            draw_ui()
+    elif label == "Next":
+        if not advance_track(1):
+            send(0x01)
+            draw_ui()
+    elif label == "Stop":
+        send(0x16)
+        stop_playback("Stopped")
+
+
+def handle_tap(px, py):
+    global orient_idx, track_scroll
+    if inside(BTN_CFG, px, py):
+        orient_idx = (orient_idx + 1) % len(ORIENTS)
+        save_orientation()
+        draw_ui(f"Orientation {orient_idx+1}/8")
+        return
+    if inside(BTN_CAL, px, py):
+        quick_calibration()
+        draw_ui()
+        return
+
+    list_rect = track_list_rect()
+    up_rect, down_rect = track_scroll_button_rects()
+    if inside(up_rect, px, py):
+        if track_scroll > 0:
+            track_scroll -= 1
+            ensure_track_scroll_bounds()
+            draw_ui()
+        return
+    if inside(down_rect, px, py):
+        visible = ensure_track_scroll_bounds()
+        max_scroll = max(0, len(tracks) - visible)
+        if track_scroll < max_scroll:
+            track_scroll += 1
+            ensure_track_scroll_bounds()
+            draw_ui()
+        return
+    if inside(list_rect, px, py):
+        if tracks:
+            row = (py - list_rect[1]) // TRACK_ROW_HEIGHT
+            visible = track_visible_count()
+            if 0 <= row < visible:
+                idx = track_scroll + int(row)
+                if idx < len(tracks):
+                    play_track_index(idx)
+        else:
+            draw_ui()
+        return
+
+    for label, rect in BUTTON_LAYOUT:
+        if inside(rect, px, py):
+            handle_button_press(label)
+            return
+
+    if inside(volbar, px, py):
+        update_volume_from_x(px)
+
+
 def scale_xy(rx, ry):
     minx, maxx, miny, maxy = current_ranges()
     o = ORIENTS[orient_idx]
@@ -686,6 +853,24 @@ def quick_calibration():
     draw_ui("Calibrated."); time.sleep(0.6)
 
 def main_loop():
+    global vol, playback_playing, selected_track_idx
+    ensure_track_selected()
+    if selected_track_idx is None and tracks:
+        try:
+            idx = next(i for i, info in enumerate(tracks) if info.get("number") == current_track_number)
+        except StopIteration:
+            idx = 0
+        selected_track_idx = idx
+        ensure_track_visible(idx)
+    draw_ui()
+    vol_set(vol)
+
+    touching = False
+    drag_vol = False
+    raw_bufx, raw_bufy = [], []
+    touch_start = None
+    touch_last = None
+    last_drag = 0.0
     global orient_idx, vol, track_scroll, selected_track_idx, playback_playing
     ensure_track_selected()
     draw_ui()
@@ -697,16 +882,41 @@ def main_loop():
     for ev in touch.read_loop():
         if ev.type == ecodes.EV_KEY and ev.code == ecodes.BTN_TOUCH:
             touching = (ev.value == 1)
-            if not touching:
-                raw_bufx.clear(); raw_bufy.clear(); drag_vol=False
+            if touching:
+                raw_bufx.clear()
+                raw_bufy.clear()
+                touch_start = None
+                touch_last = None
+                drag_vol = False
+            else:
+                if drag_vol:
+                    drag_vol = False
+                elif touch_last:
+                    handle_tap(*touch_last)
+                raw_bufx.clear()
+                raw_bufy.clear()
+                touch_start = None
+                touch_last = None
         elif ev.type == ecodes.EV_ABS:
-            if ev.code == ecodes.ABS_X: rx = ev.value; raw_bufx.append(rx)
-            elif ev.code == ecodes.ABS_Y: ry = ev.value; raw_bufy.append(ry)
-            else: continue
+            if ev.code == ecodes.ABS_X:
+                raw_bufx.append(ev.value)
+            elif ev.code == ecodes.ABS_Y:
+                raw_bufy.append(ev.value)
+            else:
+                continue
 
-            if touching and len(raw_bufx)>=4 and len(raw_bufy)>=4:
+            if touching and len(raw_bufx) >= 4 and len(raw_bufy) >= 4:
                 med_rx = int(statistics.median(raw_bufx[-6:]))
                 med_ry = int(statistics.median(raw_bufy[-6:]))
+                px, py = scale_xy(med_rx, med_ry)
+                touch_last = (px, py)
+
+                if touch_start is None:
+                    touch_start = (px, py)
+                    if inside(volbar, px, py):
+                        drag_vol = True
+                        last_drag = 0.0
+                        update_volume_from_x(px)
                 px,py = scale_xy(med_rx, med_ry)
 
                 if not drag_vol and len(raw_bufx) == 4 and len(raw_bufy) == 4:
@@ -765,6 +975,7 @@ def main_loop():
                 if drag_vol:
                     now = time.time()
                     if now - last_drag > 0.02:
+                        update_volume_from_x(px)
                         vx, vy, vw, vh = VOLBAR_RECT
                         clamped = max(vx, min(vx + vw, px))
                         vol = int((clamped - vx) * 30 / vw)
