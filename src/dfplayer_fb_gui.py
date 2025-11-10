@@ -1,7 +1,14 @@
 import json
-import os, sys, time, mmap, serial, statistics
+import os, sys, time, mmap, serial, statistics, atexit, logging
 from PIL import Image, ImageDraw, ImageFont
 from evdev import InputDevice, ecodes, list_devices
+
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 FB = "/dev/fb1"
 
@@ -50,8 +57,10 @@ def save_orientation():
     try:
         with open(ORIENT_PATH, "w", encoding="utf-8") as f:
             f.write(f"{orient_idx}\n")
+    except Exception:
+        pass
+
 TOUCH_CFG_PATH = os.path.expanduser("~/.dfplayer_touch.json")
-cal_raw = None  # (minx, maxx, miny, maxy)
 
 
 def _touch_cfg_dir(path):
@@ -169,12 +178,48 @@ def load_metadata():
 load_metadata()
 
 # ---- DFPlayer on UART0 (/dev/serial0) ----
-ser = serial.Serial('/dev/serial0', 9600, timeout=0.1)
+def init_serial():
+    """Initialize serial connection with error handling."""
+    try:
+        ser = serial.Serial('/dev/serial0', 9600, timeout=0.1)
+        logger.info("Serial port initialized successfully")
+        return ser
+    except serial.SerialException as e:
+        logger.error(f"Failed to open serial port: {e}")
+        logger.error("DFPlayer commands will not work. Check /dev/serial0 connection.")
+        return None
+    except PermissionError as e:
+        logger.error(f"Permission denied accessing serial port: {e}")
+        logger.error("Try: sudo usermod -a -G dialout $USER")
+        return None
+    except Exception as e:
+        logger.error(f"Unexpected error initializing serial: {e}")
+        return None
+
+ser = init_serial()
+
 def send(cmd, p1=0, p2=1):
-    pkt = bytearray([0x7E,0xFF,0x06,cmd,0x00,p1,p2,0x00,0x00,0xEF])
-    cs = (-sum(pkt[1:7])) & 0xFFFF
-    pkt[7], pkt[8] = (cs>>8)&0xFF, cs&0xFF
-    ser.write(pkt)
+    """Send command to DFPlayer with error handling."""
+    global ser
+    if ser is None:
+        logger.warning("Serial port not initialized, cannot send command")
+        return
+
+    try:
+        if not ser.is_open:
+            logger.warning("Serial port is closed, cannot send command")
+            return
+
+        pkt = bytearray([0x7E,0xFF,0x06,cmd,0x00,p1,p2,0x00,0x00,0xEF])
+        cs = (-sum(pkt[1:7])) & 0xFFFF
+        pkt[7], pkt[8] = (cs>>8)&0xFF, cs&0xFF
+        ser.write(pkt)
+    except serial.SerialException as e:
+        logger.error(f"Serial write failed: {e}")
+    except OSError as e:
+        logger.error(f"OS error during serial write: {e}")
+    except Exception as e:
+        logger.error(f"Unexpected error sending command: {e}")
 def vol_set(v): v = max(0, min(30, int(v))); send(0x06,0,v)
 
 def ensure_track_selected():
@@ -300,9 +345,16 @@ def load_track_catalog():
     return [dict(number=i+1, title=f"Track {i+1:03d}") for i in range(CATALOG_FALLBACK_COUNT)]
 
 tracks = load_track_catalog()
+track_numbers = [t["number"] for t in tracks]  # List of track numbers
+current_track_idx = None  # Current index in track_numbers list
 track_scroll = 0
 selected_track_idx = 0 if tracks else None
 now_playing_idx = None
+
+def rebuild_track_numbers():
+    """Rebuild track_numbers list from tracks."""
+    global track_numbers
+    track_numbers = [t["number"] for t in tracks]
 
 def track_list_rect():
     tx, ty, tw, th = TRACK_PANEL
@@ -367,17 +419,6 @@ def play_track_number(track_number):
     send(0x03, hi, lo)
 
 def play_track_index(idx, note=None):
-    global selected_track_idx, now_playing_idx, playback_playing
-    if not tracks:
-        draw_ui("No tracks available")
-        return
-    idx = max(0, min(len(tracks) - 1, idx))
-    selected_track_idx = idx
-    now_playing_idx = idx
-    ensure_track_visible(idx)
-    track = tracks[idx]
-    set_track(track["number"])
-    play_track_number(track["number"])
     global now_playing_idx, playback_playing
     track = select_track_index(idx)
     if track is None:
@@ -445,6 +486,7 @@ BUTTON_ACTIONS = {
 
 # ---- Touch device ----
 def open_touch():
+    """Open touch input device with error handling."""
     if os.path.exists("/dev/input/touchscreen"):
         return InputDevice("/dev/input/touchscreen")
     for devpath in list_devices():
@@ -457,13 +499,33 @@ def open_touch():
         raise RuntimeError("No input event devices found")
     return InputDevice(devs[0])
 
-touch = open_touch()
-ax = touch.absinfo(ecodes.ABS_X)
-ay = touch.absinfo(ecodes.ABS_Y)
-if ax is None or ay is None:
-    print(f"Touch device lacks ABS axes: {touch.path} {touch.name}", file=sys.stderr); sys.exit(1)
-drv_minx, drv_maxx = ax.min, ax.max
-drv_miny, drv_maxy = ay.min, ay.max
+def init_touch():
+    """Initialize touch device with error handling."""
+    try:
+        touch = open_touch()
+        ax = touch.absinfo(ecodes.ABS_X)
+        ay = touch.absinfo(ecodes.ABS_Y)
+        if ax is None or ay is None:
+            logger.error(f"Touch device lacks ABS axes: {touch.path} {touch.name}")
+            logger.error("Touch input will not work properly")
+            return None, None, None, None, None
+        drv_minx, drv_maxx = ax.min, ax.max
+        drv_miny, drv_maxy = ay.min, ay.max
+        logger.info(f"Touch device initialized: {touch.name}")
+        return touch, drv_minx, drv_maxx, drv_miny, drv_maxy
+    except RuntimeError as e:
+        logger.error(f"Failed to initialize touch device: {e}")
+        logger.error("Touch input will not work. Ensure touch device is connected.")
+        return None, 0, 4095, 0, 4095
+    except PermissionError as e:
+        logger.error(f"Permission denied accessing touch device: {e}")
+        logger.error("Try: sudo usermod -a -G input $USER")
+        return None, 0, 4095, 0, 4095
+    except Exception as e:
+        logger.error(f"Unexpected error initializing touch device: {e}")
+        return None, 0, 4095, 0, 4095
+
+touch, drv_minx, drv_maxx, drv_miny, drv_maxy = init_touch()
 
 def current_ranges():
     return cal_raw if cal_raw else (drv_minx, drv_maxx, drv_miny, drv_maxy)
@@ -471,6 +533,33 @@ def current_ranges():
 # ---- Framebuffer (RGB565 LE) ----
 fb = open(FB, "r+b", buffering=0)
 mm = mmap.mmap(fb.fileno(), W*H*2, mmap.MAP_SHARED, mmap.PROT_WRITE)
+
+def cleanup():
+    """Clean up all resources: serial port, framebuffer, and memory map."""
+    global ser, mm, fb
+    try:
+        if hasattr(ser, 'is_open') and ser.is_open:
+            ser.close()
+            logger.info("Serial port closed")
+    except Exception as e:
+        logger.warning(f"Error closing serial port: {e}")
+
+    try:
+        if mm:
+            mm.close()
+            logger.info("Memory map closed")
+    except Exception as e:
+        logger.warning(f"Error closing memory map: {e}")
+
+    try:
+        if fb:
+            fb.close()
+            logger.info("Framebuffer closed")
+    except Exception as e:
+        logger.warning(f"Error closing framebuffer: {e}")
+
+# Register cleanup handler
+atexit.register(cleanup)
 
 def rgb888_to_rgb565le(img):
     b = img.tobytes()
@@ -853,7 +942,13 @@ def quick_calibration():
     draw_ui("Calibrated."); time.sleep(0.6)
 
 def main_loop():
-    global vol, playback_playing, selected_track_idx
+    global vol, playback_playing, selected_track_idx, touch
+
+    if touch is None:
+        logger.error("Touch device not initialized. Cannot start main loop.")
+        logger.error("Please check touch device connection and permissions.")
+        sys.exit(1)
+
     ensure_track_selected()
     if selected_track_idx is None and tracks:
         try:
@@ -871,13 +966,6 @@ def main_loop():
     touch_start = None
     touch_last = None
     last_drag = 0.0
-    global orient_idx, vol, track_scroll, selected_track_idx, playback_playing
-    ensure_track_selected()
-    draw_ui()
-    vol_set(vol)
-    touching=False; drag_vol=False
-    raw_bufx,raw_bufy=[],[]
-    last_drag=0.0
 
     for ev in touch.read_loop():
         if ev.type == ecodes.EV_KEY and ev.code == ecodes.BTN_TOUCH:
