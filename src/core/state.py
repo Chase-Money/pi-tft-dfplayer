@@ -4,6 +4,7 @@ Manages runtime state for playback, tracks, UI, and artwork caching.
 """
 
 import logging
+import threading
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any
 
@@ -59,7 +60,7 @@ class ApplicationState:
         self.current_artwork_path: Optional[str] = None
         self.current_artwork_thumb: Optional[Any] = None
 
-    def set_tracks(self, tracks: List[Track]):
+    def set_tracks(self, tracks: List[Track]) -> None:
         """Set track catalog.
 
         Args:
@@ -166,7 +167,7 @@ class ApplicationState:
         new_idx = (current_idx + delta) % len(self.tracks)
         return self.select_track_index(new_idx)
 
-    def start_playback(self, track_index: Optional[int] = None):
+    def start_playback(self, track_index: Optional[int] = None) -> None:
         """Start playback at given track index.
 
         Args:
@@ -182,18 +183,18 @@ class ApplicationState:
         if track:
             logger.info(f"Playback started: {track.title}")
 
-    def pause_playback(self):
+    def pause_playback(self) -> None:
         """Pause playback."""
         self.playback.playing = False
         logger.info("Playback paused")
 
-    def stop_playback(self):
+    def stop_playback(self) -> None:
         """Stop playback."""
         self.playback.playing = False
         self.playback.now_playing_index = None
         logger.info("Playback stopped")
 
-    def set_volume(self, volume: int):
+    def set_volume(self, volume: int) -> None:
         """Set volume level.
 
         Args:
@@ -202,7 +203,7 @@ class ApplicationState:
         self.playback.volume = max(0, min(30, int(volume)))
         logger.debug(f"Volume set to {self.playback.volume}")
 
-    def set_metadata(self, metadata: Dict[int, Dict[str, Any]]):
+    def set_metadata(self, metadata: Dict[int, Dict[str, Any]]) -> None:
         """Set track metadata dictionary.
 
         Args:
@@ -222,7 +223,7 @@ class ApplicationState:
         """
         return self.metadata.get(track_number, {})
 
-    def cache_artwork(self, path: str, thumbnail: Any):
+    def cache_artwork(self, path: str, thumbnail: Any) -> None:
         """Cache artwork thumbnail.
 
         Args:
@@ -244,7 +245,7 @@ class ApplicationState:
         """
         return self.artwork_cache.get(path)
 
-    def ensure_track_visible(self, index: int, visible_count: int):
+    def ensure_track_visible(self, index: int, visible_count: int) -> None:
         """Ensure track at index is visible in scrollable list.
 
         Args:
@@ -263,6 +264,7 @@ class ApplicationState:
 
 # Global state instance
 _state_instance = None
+_state_lock = threading.Lock()
 
 
 def get_state() -> ApplicationState:
@@ -274,6 +276,9 @@ def get_state() -> ApplicationState:
     global _state_instance
 
     if _state_instance is None:
-        _state_instance = ApplicationState()
+        with _state_lock:
+            # Double-check locking pattern
+            if _state_instance is None:
+                _state_instance = ApplicationState()
 
     return _state_instance
