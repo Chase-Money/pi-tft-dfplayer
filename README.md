@@ -78,6 +78,32 @@ sudo systemctl enable --now dfplayer-fb
 > `WorkingDirectory` in `systemd/dfplayer-fb.service` (or create a drop-in) so
 > the service can locate `src/dfplayer_fb_gui.py`.
 
+Hardware profiles (v2)
+
+This repo now ships v2 launchers for two hardware profiles that run independently of the legacy touchscreen service:
+
+- Touchscreen v2 (3.5" ILI9486 + XPT2046/ADS7846)
+  - Manual: `python3 src/main_touch_v2.py`
+  - Service: `sudo cp systemd/dfplayer-fb-v2.service /etc/systemd/system/ && sudo systemctl enable --now dfplayer-fb-v2`
+  - Setup/troubleshooting: see `docs/touch_v2_setup.md`
+
+- 1.44" Buttons Variant (ST7735 + GPIO buttons/joystick)
+  - Install deps + enable SPI: `./scripts/install_st7735_buttons_v2.sh` then reboot
+  - Manual (off-device dev with emulator): `DFPLAYER_USE_EMULATOR=1 DFPLAYER_HW_PROFILE=st7735_buttons python3 src/main_v2.py`
+  - Service (on-device): `sudo cp systemd/dfplayer-144lcd.service /etc/systemd/system/ && sudo systemctl enable --now dfplayer-144lcd`
+  - Setup/troubleshooting: see `docs/st7735_setup.md`
+
+Profile selection
+
+- v2/v3 precedence: CLI flag `--hardware`, then environment variable `DFPLAYER_HW_PROFILE`, then config file key (`hardware.profile`), then auto-detect (fb/hat). Manual override always wins.
+- Example: `DFPLAYER_HW_PROFILE=st7735_buttons python3 src/main_v2.py` or `python3 src/main_v2.py --hardware st7735_buttons`.
+- Emulator: set `DFPLAYER_USE_EMULATOR=1` to force the ST7735 display abstraction into emulator mode (helpful off-device).
+
+Smoke tests (v2)
+
+- See `docs/smoke_test_checklist_v2.md` for step-by-step validation of both profiles.
+- Quick helper: `./scripts/smoke_test_v2.sh` performs basic import checks and prints the next steps to run on real hardware.
+
 Using the UI
 	•	CFG cycles through 8 orientation combos (swap/flip).
 	•	CAL shows 4 crosshairs—tap and hold ~0.5 s on each.
@@ -113,6 +139,36 @@ Roadmap
 	•	Optional album art (scaled) from SD
 	•	Long-press gestures (seek / fast-volume)
 	•	Clean shutdown button (GPIO or long-press)
+
+## Architectural Recommendations
+
+The following recommendations are based on a recent codebase review and refactoring effort. They are intended to guide future development and ensure the project remains maintainable and testable.
+
+### 1. Adopt Git for Version Control
+
+The codebase has recently been refactored from a single script into a more modular, object-oriented architecture (the "v2" implementation). This was a significant improvement, but the "v2" file naming convention should be considered a temporary measure.
+
+**Recommendation:** Use Git branches for feature development and refactoring instead of creating separate `_v2` files. For example, new features should be developed on a feature branch (e.g., `feature/new-ui-component`) and then merged into the main branch after review. This is a more standard and robust approach to version control.
+
+### 2. Expand Test Coverage
+
+The `v2` refactoring introduced a new test suite (`tests/test_v2_logic.py`) that allows for testing the application logic without the need for the actual hardware. This is a major step forward for the project's stability.
+
+**Recommendation:** Continue to expand the test suite to cover more of the application's logic. This should include:
+*   Tests for the calibration process (`handle_cal_button`).
+*   Edge cases for the track list scrolling and selection.
+*   The behavior of the UI when no tracks are available.
+*   Tests for the different hardware profiles.
+
+### 3. Continue to Refine the Architecture
+
+The `v2` architecture provides a solid foundation for future development. As new features are added, this modular structure should be maintained and refined.
+
+**Recommendation:**
+*   **Simplify the Main Loop:** The `run` method in `dfplayer_fb_gui_v2.py` is the most complex part of the application. Future refactoring efforts should focus on simplifying this loop by further abstracting the event handling logic. For example, a dedicated `EventHandler` class could be created to process touch events and delegate them to the appropriate UI components.
+*   **Enhance UI Components:** If the UI is expected to grow in complexity, consider creating a more robust UI component system or evaluating a library like `pygame` (configured to use the framebuffer backend).
+
+By following these recommendations, the project will be well-positioned for future growth and will remain a stable and maintainable codebase.
 
 License
 

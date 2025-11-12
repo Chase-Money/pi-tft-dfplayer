@@ -4,6 +4,7 @@ Implements a simple publish/subscribe event system for application events.
 """
 
 import logging
+import threading
 from collections import defaultdict
 from typing import Callable, Any, Dict, List
 
@@ -115,6 +116,7 @@ class Events:
 
 # Global event bus instance
 _event_bus_instance = None
+_event_bus_lock = threading.Lock()
 
 
 def get_event_bus() -> EventBus:
@@ -126,6 +128,9 @@ def get_event_bus() -> EventBus:
     global _event_bus_instance
 
     if _event_bus_instance is None:
-        _event_bus_instance = EventBus()
+        with _event_bus_lock:
+            # Double-check locking pattern
+            if _event_bus_instance is None:
+                _event_bus_instance = EventBus()
 
     return _event_bus_instance

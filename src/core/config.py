@@ -10,9 +10,23 @@ Handles JSON-based configuration persistence for application settings including:
 import json
 import logging
 import os
+import threading
+from typing import Any, Dict, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
+
+# 8 orientation combos we can cycle through
+ORIENTS = [
+    dict(SWAP_XY=False, FLIP_X=False, FLIP_Y=False),
+    dict(SWAP_XY=False, FLIP_X=True , FLIP_Y=False),
+    dict(SWAP_XY=False, FLIP_X=False, FLIP_Y=True ),
+    dict(SWAP_XY=False, FLIP_X=True , FLIP_Y=True ),
+    dict(SWAP_XY=True , FLIP_X=False, FLIP_Y=False),
+    dict(SWAP_XY=True , FLIP_X=True , FLIP_Y=False),
+    dict(SWAP_XY=True , FLIP_X=False, FLIP_Y=True ),
+    dict(SWAP_XY=True , FLIP_X=True , FLIP_Y=True ),
+]
 
 class Config:
     """Centralized configuration manager.
@@ -62,11 +76,11 @@ class Config:
         self.config_path = config_path
         self.data = self._load_or_create()
 
-    def _load_or_create(self):
+    def _load_or_create(self) -> Dict[str, Any]:
         """Load config from file or create with defaults.
 
         Returns:
-            dict: Configuration data
+            Configuration data dictionary
         """
         if os.path.exists(self.config_path):
             try:
@@ -89,7 +103,7 @@ class Config:
             logger.info("No config file found, using defaults")
             return self.DEFAULTS.copy()
 
-    def _deep_merge(self, base, overlay):
+    def _deep_merge(self, base: Dict[str, Any], overlay: Dict[str, Any]) -> Dict[str, Any]:
         """Deep merge two dictionaries.
 
         Args:
@@ -97,7 +111,7 @@ class Config:
             overlay: Overlay dictionary (user values)
 
         Returns:
-            dict: Merged dictionary
+            Merged dictionary
         """
         result = base.copy()
 
@@ -109,7 +123,7 @@ class Config:
 
         return result
 
-    def get(self, key_path, default=None):
+    def get(self, key_path: str, default: Any = None) -> Any:
         """Get configuration value by dot-separated path.
 
         Args:
@@ -130,7 +144,7 @@ class Config:
 
         return value
 
-    def set(self, key_path, value):
+    def set(self, key_path: str, value: Any) -> None:
         """Set configuration value by dot-separated path.
 
         Args:
@@ -150,11 +164,11 @@ class Config:
         data[keys[-1]] = value
         logger.debug(f"Config set: {key_path} = {value}")
 
-    def save(self):
+    def save(self) -> bool:
         """Save configuration to file with atomic write.
 
         Returns:
-            bool: True if successful, False otherwise
+            True if successful, False otherwise
         """
         try:
             # Ensure directory exists
@@ -192,39 +206,39 @@ class Config:
 
     # Convenience methods for common operations
 
-    def get_touch_orientation(self):
+    def get_touch_orientation(self) -> int:
         """Get touch orientation index."""
         return self.get("touch.orientation_index", 6)
 
-    def set_touch_orientation(self, index):
+    def set_touch_orientation(self, index: int) -> None:
         """Set touch orientation index."""
         self.set("touch.orientation_index", int(index))
 
-    def get_touch_calibration(self):
+    def get_touch_calibration(self) -> Optional[Tuple[int, int, int, int]]:
         """Get touch calibration tuple or None."""
         cal = self.get("touch.calibration")
         if isinstance(cal, (list, tuple)) and len(cal) == 4:
             return tuple(int(v) for v in cal)
         return None
 
-    def set_touch_calibration(self, minx, maxx, miny, maxy):
+    def set_touch_calibration(self, minx: int, maxx: int, miny: int, maxy: int) -> None:
         """Set touch calibration values."""
         self.set("touch.calibration", [int(minx), int(maxx), int(miny), int(maxy)])
 
-    def clear_touch_calibration(self):
+    def clear_touch_calibration(self) -> None:
         """Clear touch calibration."""
         self.set("touch.calibration", None)
 
-    def get_volume(self):
+    def get_volume(self) -> int:
         """Get volume level."""
         return self.get("audio.volume", 18)
 
-    def set_volume(self, volume):
+    def set_volume(self, volume: int) -> None:
         """Set volume level."""
         volume = max(0, min(30, int(volume)))
         self.set("audio.volume", volume)
 
-    def get_metadata_path(self):
+    def get_metadata_path(self) -> Optional[str]:
         """Get metadata file path."""
         # Check environment variable first
         env_path = os.environ.get("DFPLAYER_METADATA")
@@ -232,7 +246,7 @@ class Config:
             return env_path
         return self.get("paths.metadata", "/boot/dfplayer_metadata.json")
 
-    def get_artwork_root(self):
+    def get_artwork_root(self) -> Optional[str]:
         """Get artwork root directory."""
         # Check environment variable first
         env_path = os.environ.get("DFPLAYER_ART_ROOT")
@@ -240,7 +254,7 @@ class Config:
             return env_path
         return self.get("paths.artwork_root")
 
-    def get_track_catalog_path(self):
+    def get_track_catalog_path(self) -> Optional[str]:
         """Get track catalog file path."""
         # Check environment variable first
         env_path = os.environ.get("DFPLAYER_TRACK_CATALOG")
@@ -251,20 +265,24 @@ class Config:
 
 # Global configuration instance
 _config_instance = None
+_config_lock = threading.Lock()
 
 
-def get_config(config_path=None):
+def get_config(config_path: Optional[str] = None) -> Config:
     """Get global configuration instance.
 
     Args:
         config_path: Path to config file (only used on first call)
 
     Returns:
-        Config: Global configuration instance
+        Global configuration instance
     """
     global _config_instance
 
     if _config_instance is None:
-        _config_instance = Config(config_path)
+        with _config_lock:
+            # Double-check locking pattern
+            if _config_instance is None:
+                _config_instance = Config(config_path)
 
     return _config_instance

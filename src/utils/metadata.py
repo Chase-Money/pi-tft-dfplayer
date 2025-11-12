@@ -67,7 +67,14 @@ def load_metadata(metadata_path: str, artwork_root: Optional[str] = None) -> Dic
             art_path = info.get("artwork")
             if art_path:
                 if not os.path.isabs(art_path):
-                    entry["artwork"] = os.path.join(base_dir, art_path)
+                    # Normalize path to prevent traversal attacks
+                    art_path = os.path.normpath(art_path)
+                    # Ensure the normalized path doesn't attempt to escape base_dir
+                    if art_path.startswith('..') or os.path.isabs(art_path):
+                        logger.warning(f"Rejected potentially unsafe artwork path: {art_path}")
+                        entry["artwork"] = None
+                    else:
+                        entry["artwork"] = os.path.join(base_dir, art_path)
                 else:
                     entry["artwork"] = art_path
 

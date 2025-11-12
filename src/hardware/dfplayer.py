@@ -5,6 +5,7 @@ Implements the DFPlayer command protocol with checksums and error handling.
 """
 
 import logging
+from typing import Optional
 import serial
 
 logger = logging.getLogger(__name__)
@@ -20,6 +21,15 @@ class DFPlayer:
         port: Serial port path (default: /dev/serial0)
         baudrate: Communication speed (default: 9600)
         timeout: Serial read timeout in seconds
+
+    Example:
+        >>> with DFPlayer('/dev/serial0') as player:
+        ...     player.set_volume(20)
+        ...     player.play_track(1)
+
+    Note:
+        DFPlayer Mini expects files organized as /mp3/0001.mp3, /mp3/0002.mp3
+        on its micro-SD card. Track numbers must match filesystem numbering.
     """
 
     # Command constants
@@ -32,28 +42,51 @@ class DFPlayer:
     CMD_PLAY_FOLDER = 0x0F
     CMD_STOP = 0x16
 
-    def __init__(self, port='/dev/serial0', baudrate=9600, timeout=0.1):
+    # Valid ranges
+    MIN_VOLUME = 0
+    MAX_VOLUME = 30
+    MIN_TRACK = 1
+    MAX_TRACK = 3000
+    MIN_FOLDER = 1
+    MAX_FOLDER = 99
+
+    def __init__(self, port: str = '/dev/serial0', baudrate: int = 9600, timeout: float = 0.1) -> None:
         """Initialize DFPlayer interface.
 
         Args:
             port: Serial port path
-            baudrate: Communication baudrate
+            baudrate: Communication baudrate (typically 9600)
             timeout: Serial read timeout in seconds
+
+        Raises:
+            ValueError: If port is empty or parameters are invalid
+            serial.SerialException: If serial port cannot be opened
+            PermissionError: If insufficient permissions to access port
         """
+        if not port or not isinstance(port, str):
+            raise ValueError("Port must be a non-empty string")
+        if baudrate <= 0:
+            raise ValueError(f"Baudrate must be positive, got {baudrate}")
+        if timeout < 0:
+            raise ValueError(f"Timeout must be non-negative, got {timeout}")
+
         self.port = port
         self.baudrate = baudrate
         self.timeout = timeout
-        self._ser = None
+        self._ser: Optional[serial.Serial] = None
         self._connect()
 
-    def _connect(self):
-        """Establish serial connection with error handling."""
+    def _connect(self) -> None:
+        """Establish serial connection with error handling.
+
+        Sets self._ser to None if connection fails, allowing graceful degradation.
+        """
         try:
             self._ser = serial.Serial(self.port, self.baudrate, timeout=self.timeout)
-            logger.info(f"DFPlayer connected on {self.port}")
+            logger.info(f"DFPlayer connected on {self.port} at {self.baudrate} baud")
         except serial.SerialException as e:
             logger.error(f"Failed to open serial port {self.port}: {e}")
-            logger.error("DFPlayer commands will not work. Check connection.")
+            logger.error("DFPlayer commands will not work. Check connection and cable.")
             self._ser = None
         except PermissionError as e:
             logger.error(f"Permission denied accessing {self.port}: {e}")
@@ -63,25 +96,38 @@ class DFPlayer:
             logger.error(f"Unexpected error initializing serial: {e}")
             self._ser = None
 
-    def send(self, cmd, param1=0, param2=1):
+    def send(self, cmd: int, param1: int = 0, param2: int = 1) -> None:
         """Send command to DFPlayer with error handling.
 
         Constructs a 10-byte packet:
         [0x7E, 0xFF, 0x06, cmd, 0x00, param1, param2, checksum_hi, checksum_lo, 0xEF]
 
         Args:
-            cmd: Command byte
-            param1: First parameter byte (high byte for 16-bit values)
-            param2: Second parameter byte (low byte for 16-bit values)
+            cmd: Command byte (0x00-0xFF)
+            param1: First parameter byte (high byte for 16-bit values, 0-255)
+            param2: Second parameter byte (low byte for 16-bit values, 0-255)
+
+        Raises:
+            ValueError: If parameters are out of valid byte range
+            RuntimeError: If serial port is not initialized or closed
+
+        Note:
+            Checksum is calculated as: -sum(bytes[1:7]) & 0xFFFF
         """
+        # Validate parameters
+        if not (0 <= cmd <= 0xFF):
+            raise ValueError(f"Command must be 0-255, got {cmd}")
+        if not (0 <= param1 <= 0xFF):
+            raise ValueError(f"Param1 must be 0-255, got {param1}")
+        if not (0 <= param2 <= 0xFF):
+            raise ValueError(f"Param2 must be 0-255, got {param2}")
+
         if self._ser is None:
-            logger.warning("Serial port not initialized, cannot send command")
-            return
+            raise RuntimeError("Serial port not initialized, cannot send command")
 
         try:
             if not self._ser.is_open:
-                logger.warning("Serial port is closed, cannot send command")
-                return
+                raise RuntimeError("Serial port is closed, cannot send command")
 
             # Construct packet
             pkt = bytearray([0x7E, 0xFF, 0x06, cmd, 0x00, param1, param2, 0x00, 0x00, 0xEF])
@@ -95,10 +141,13 @@ class DFPlayer:
 
         except serial.SerialException as e:
             logger.error(f"Serial write failed: {e}")
+            raise
         except OSError as e:
             logger.error(f"OS error during serial write: {e}")
+            raise
         except Exception as e:
             logger.error(f"Unexpected error sending command: {e}")
+            raise
 
     def play_track(self, track_number):
         """Play specific track number.

@@ -1,0 +1,15 @@
+[Unit]
+Description=DFPlayer 1.44" ST7735 Button Variant (package-aware)
+After=multi-user.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/pi/pi-tft-dfplayer
+Environment=DFPLAYER_HW_PROFILE=st7735_buttons
+ExecStart=/usr/bin/python3 src/main.py
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+

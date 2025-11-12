@@ -6,7 +6,7 @@ Implements the PlaybackBackend interface for DFPlayer Mini MP3 module.
 import logging
 from typing import Optional, Dict, Any
 
-from .base import PlaybackBackend
+from backends.base import PlaybackBackend
 from hardware.dfplayer import DFPlayer
 
 logger = logging.getLogger(__name__)
