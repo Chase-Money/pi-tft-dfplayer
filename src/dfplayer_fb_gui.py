@@ -583,13 +583,6 @@ try:
 except Exception:
     FONTB = ImageFont.load_default(); FONTM = ImageFont.load_default(); FONTS = ImageFont.load_default()
 
-BUTTON_LAYOUT = [
-    ("Play", (20, 20, 200, 80)),
-    ("Stop", (20, 110, 200, 60)),
-    ("Prev", (20, 180, 95, 70)),
-    ("Next", (125, 180, 95, 70)),
-]
-volbar = (20, 260, 200, 22)
 BUTTONS = [
     dict(key="play", rect=(20,  24, 200, 86), fill=(70, 175, 120), text=(255, 255, 255)),
     dict(key="stop", rect=(20, 124, 200, 72), fill=(195, 80, 80), text=(255, 255, 255)),
@@ -657,16 +650,6 @@ def draw_ui(note=None):
     d = ImageDraw.Draw(img)
 
     # main buttons
-    for label, (x, y, w, h) in BUTTON_LAYOUT:
-        if label == "Stop":
-            fill = (180, 70, 70)
-        elif label in ("Prev", "Next"):
-            fill = (70, 100, 170)
-        else:
-            fill = (60, 170, 90)
-        d.rounded_rectangle([x, y, x + w, y + h], radius=16, fill=fill)
-        display_label = "Pause" if label == "Play" and playback_playing else label
-        draw_text_center(d, x, y, w, h, display_label, FONTB)
     for button in BUTTONS:
         x, y, w, h = button["rect"]
         label_key = button["key"]
@@ -778,7 +761,7 @@ def inside(rect, px, py):
 
 def update_volume_from_x(px):
     global vol
-    x, y, w, _ = volbar
+    x, y, w, _ = VOLBAR_RECT
     clamped = max(x, min(x + w, px))
     new_vol = int(round((clamped - x) * 30 / w))
     new_vol = max(0, min(30, new_vol))
@@ -859,12 +842,14 @@ def handle_tap(px, py):
             draw_ui()
         return
 
-    for label, rect in BUTTON_LAYOUT:
-        if inside(rect, px, py):
-            handle_button_press(label)
+    for button in BUTTONS:
+        if inside(button["rect"], px, py):
+            action = BUTTON_ACTIONS.get(button["key"])
+            if action:
+                action()
             return
 
-    if inside(volbar, px, py):
+    if inside(VOLBAR_RECT, px, py):
         update_volume_from_x(px)
 
 
@@ -1001,11 +986,10 @@ def main_loop():
 
                 if touch_start is None:
                     touch_start = (px, py)
-                    if inside(volbar, px, py):
+                    if inside(VOLBAR_RECT, px, py):
                         drag_vol = True
                         last_drag = 0.0
                         update_volume_from_x(px)
-                px,py = scale_xy(med_rx, med_ry)
 
                 if not drag_vol and len(raw_bufx) == 4 and len(raw_bufy) == 4:
                     if inside(BTN_CFG, px, py):
