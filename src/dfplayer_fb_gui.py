@@ -584,12 +584,12 @@ except Exception:
     FONTB = ImageFont.load_default(); FONTM = ImageFont.load_default(); FONTS = ImageFont.load_default()
 
 BUTTONS = [
-    dict(key="play", rect=(20,  24, 200, 86), fill=(70, 175, 120), text=(255, 255, 255)),
-    dict(key="stop", rect=(20, 124, 200, 72), fill=(195, 80, 80), text=(255, 255, 255)),
-    dict(key="prev", rect=(20,  212, 94,  72), fill=(80, 110, 185), text=(255, 255, 255)),
-    dict(key="next", rect=(126, 212, 94,  72), fill=(80, 110, 185), text=(255, 255, 255)),
+    dict(key="play", rect=(20,  20, 200, 80), fill=(70, 175, 120), text=(255, 255, 255)),
+    dict(key="stop", rect=(20, 110, 200, 60), fill=(195, 80, 80), text=(255, 255, 255)),
+    dict(key="prev", rect=(20,  180, 94,  60), fill=(80, 110, 185), text=(255, 255, 255)),
+    dict(key="next", rect=(126, 180, 94,  60), fill=(80, 110, 185), text=(255, 255, 255)),
 ]
-VOLBAR_RECT = (20, 292, 200, 20)
+VOLBAR_RECT = (20, 260, 200, 24)
 vol = 18
 BTN_CAL = (4, 4, 52, 30)             # top-left  CAL
 BTN_CFG = (W-56, 4, 52, 30)          # top-right CFG
