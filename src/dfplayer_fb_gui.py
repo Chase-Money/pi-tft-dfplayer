@@ -220,6 +220,67 @@ def send(cmd, p1=0, p2=1):
         logger.error(f"OS error during serial write: {e}")
     except Exception as e:
         logger.error(f"Unexpected error sending command: {e}")
+
+def read_dfplayer_response(timeout=0.3):
+    """Read 10-byte response from DFPlayer.
+
+    Returns:
+        bytes: 10-byte response packet, or None if timeout/error
+    """
+    global ser
+    if ser is None or not ser.is_open:
+        return None
+
+    try:
+        original_timeout = ser.timeout
+        ser.timeout = timeout
+        response = ser.read(10)
+        ser.timeout = original_timeout
+
+        if len(response) == 10 and response[0] == 0x7E and response[9] == 0xEF:
+            # Validate checksum
+            cs = (-sum(response[1:7])) & 0xFFFF
+            cs_high, cs_low = (cs >> 8) & 0xFF, cs & 0xFF
+            if response[7] == cs_high and response[8] == cs_low:
+                return response
+            else:
+                logger.warning("DFPlayer response checksum mismatch")
+        return None
+    except Exception as e:
+        logger.warning(f"Error reading DFPlayer response: {e}")
+        return None
+
+def query_dfplayer_file_count():
+    """Query DFPlayer for number of files in /mp3 folder.
+
+    Returns:
+        int: Number of files, or None if query failed
+    """
+    global ser
+    if ser is None:
+        return None
+
+    try:
+        # Clear any pending data
+        if ser.in_waiting:
+            ser.read(ser.in_waiting)
+
+        # Send query command 0x4C (get file count in /mp3 folder)
+        send(0x4C, 0, 0)
+        time.sleep(0.1)  # Give DFPlayer time to respond
+
+        response = read_dfplayer_response(timeout=0.5)
+        if response and response[3] == 0x4C:
+            file_count = (response[5] << 8) | response[6]
+            logger.info(f"DFPlayer reports {file_count} files in /mp3 folder")
+            return file_count
+        else:
+            logger.warning("DFPlayer did not respond to file count query")
+            return None
+    except Exception as e:
+        logger.error(f"Error querying DFPlayer file count: {e}")
+        return None
+
 def vol_set(v): v = max(0, min(30, int(v))); send(0x06,0,v)
 
 def ensure_track_selected():
@@ -307,6 +368,17 @@ def _catalog_paths():
     ]
 
 def load_track_catalog():
+    """Load track catalog from file, DFPlayer query, or fallback.
+
+    Priority order:
+    1. Manual catalog file (config/track_catalog.txt or similar)
+    2. Query DFPlayer for file count (auto-generate generic names)
+    3. Fallback to 30 placeholder tracks
+
+    Returns:
+        list: List of track dicts with 'number' and 'title' keys
+    """
+    # Try manual catalog file first
     for path in _catalog_paths():
         if not path:
             continue
@@ -341,7 +413,19 @@ def load_track_catalog():
             tracks = []
         if tracks:
             tracks.sort(key=lambda t: t["number"])
+            logger.info(f"Loaded {len(tracks)} tracks from catalog file: {path}")
             return tracks
+
+    # No catalog file found - try querying DFPlayer
+    logger.info("No track catalog file found, querying DFPlayer...")
+    file_count = query_dfplayer_file_count()
+    if file_count and file_count > 0:
+        logger.info(f"Auto-generating catalog for {file_count} tracks from DFPlayer")
+        return [dict(number=i+1, title=f"Track {i+1:04d}") for i in range(file_count)]
+
+    # Last resort: fallback placeholder tracks
+    logger.warning(f"Could not query DFPlayer, using fallback {CATALOG_FALLBACK_COUNT}-track catalog")
+    logger.warning("Create config/track_catalog.txt with your actual track names to fix this")
     return [dict(number=i+1, title=f"Track {i+1:03d}") for i in range(CATALOG_FALLBACK_COUNT)]
 
 tracks = load_track_catalog()
