@@ -220,6 +220,92 @@ def send(cmd, p1=0, p2=1):
         logger.error(f"OS error during serial write: {e}")
     except Exception as e:
         logger.error(f"Unexpected error sending command: {e}")
+
+def read_dfplayer_response(timeout=0.3):
+    """Read 10-byte response from DFPlayer.
+
+    Returns:
+        bytes: 10-byte response packet, or None if timeout/error
+    """
+    global ser
+    if ser is None or not ser.is_open:
+        return None
+
+    try:
+        original_timeout = ser.timeout
+        ser.timeout = timeout
+        response = ser.read(10)
+        ser.timeout = original_timeout
+
+        if len(response) == 10 and response[0] == 0x7E and response[9] == 0xEF:
+            # Validate checksum
+            cs = (-sum(response[1:7])) & 0xFFFF
+            cs_high, cs_low = (cs >> 8) & 0xFF, cs & 0xFF
+            if response[7] == cs_high and response[8] == cs_low:
+                return response
+            else:
+                logger.warning("DFPlayer response checksum mismatch")
+        return None
+    except Exception as e:
+        logger.warning(f"Error reading DFPlayer response: {e}")
+        return None
+
+def query_dfplayer_file_count():
+    """Query DFPlayer for number of files.
+
+    Tries multiple query methods:
+    1. Command 0x48 - Total files on TF card (all folders)
+    2. Command 0x4C - Files in /mp3 folder specifically
+
+    Returns:
+        int: Number of files, or None if query failed
+    """
+    global ser
+    if ser is None:
+        return None
+
+    try:
+        # Clear any pending data
+        if ser.in_waiting:
+            ser.read(ser.in_waiting)
+
+        # Try 0x48 first (total TF card files)
+        logger.info("Querying DFPlayer with 0x48 (total TF card files)...")
+        send(0x48, 0, 0)
+        time.sleep(0.2)  # Give DFPlayer time to respond
+
+        response = read_dfplayer_response(timeout=0.5)
+        if response:
+            logger.info(f"0x48 response: {response.hex()}")
+            if response[3] == 0x48:
+                file_count = (response[5] << 8) | response[6]
+                logger.info(f"DFPlayer reports {file_count} total files on TF card")
+                if file_count > 0:
+                    return file_count
+
+        # Clear buffer and try 0x4C (mp3 folder)
+        if ser.in_waiting:
+            ser.read(ser.in_waiting)
+
+        logger.info("Querying DFPlayer with 0x4C (/mp3 folder files)...")
+        send(0x4C, 0, 0)
+        time.sleep(0.2)
+
+        response = read_dfplayer_response(timeout=0.5)
+        if response:
+            logger.info(f"0x4C response: {response.hex()}")
+            if response[3] == 0x4C:
+                file_count = (response[5] << 8) | response[6]
+                logger.info(f"DFPlayer reports {file_count} files in /mp3 folder")
+                return file_count
+
+        logger.warning("DFPlayer did not respond to file count queries (tried 0x48 and 0x4C)")
+        logger.warning("Consider creating config/track_catalog.txt with your track list")
+        return None
+    except Exception as e:
+        logger.error(f"Error querying DFPlayer file count: {e}")
+        return None
+
 def vol_set(v): v = max(0, min(30, int(v))); send(0x06,0,v)
 
 def ensure_track_selected():
@@ -307,6 +393,17 @@ def _catalog_paths():
     ]
 
 def load_track_catalog():
+    """Load track catalog from file, DFPlayer query, or fallback.
+
+    Priority order:
+    1. Manual catalog file (config/track_catalog.txt or similar)
+    2. Query DFPlayer for file count (auto-generate generic names)
+    3. Fallback to 30 placeholder tracks
+
+    Returns:
+        list: List of track dicts with 'number' and 'title' keys
+    """
+    # Try manual catalog file first
     for path in _catalog_paths():
         if not path:
             continue
@@ -341,7 +438,19 @@ def load_track_catalog():
             tracks = []
         if tracks:
             tracks.sort(key=lambda t: t["number"])
+            logger.info(f"Loaded {len(tracks)} tracks from catalog file: {path}")
             return tracks
+
+    # No catalog file found - try querying DFPlayer
+    logger.info("No track catalog file found, querying DFPlayer...")
+    file_count = query_dfplayer_file_count()
+    if file_count and file_count > 0:
+        logger.info(f"Auto-generating catalog for {file_count} tracks from DFPlayer")
+        return [dict(number=i+1, title=f"Track {i+1:04d}") for i in range(file_count)]
+
+    # Last resort: fallback placeholder tracks
+    logger.warning(f"Could not query DFPlayer, using fallback {CATALOG_FALLBACK_COUNT}-track catalog")
+    logger.warning("Create config/track_catalog.txt with your actual track names to fix this")
     return [dict(number=i+1, title=f"Track {i+1:03d}") for i in range(CATALOG_FALLBACK_COUNT)]
 
 tracks = load_track_catalog()
@@ -583,20 +692,13 @@ try:
 except Exception:
     FONTB = ImageFont.load_default(); FONTM = ImageFont.load_default(); FONTS = ImageFont.load_default()
 
-BUTTON_LAYOUT = [
-    ("Play", (20, 20, 200, 80)),
-    ("Stop", (20, 110, 200, 60)),
-    ("Prev", (20, 180, 95, 70)),
-    ("Next", (125, 180, 95, 70)),
-]
-volbar = (20, 260, 200, 22)
 BUTTONS = [
-    dict(key="play", rect=(20,  24, 200, 86), fill=(70, 175, 120), text=(255, 255, 255)),
-    dict(key="stop", rect=(20, 124, 200, 72), fill=(195, 80, 80), text=(255, 255, 255)),
-    dict(key="prev", rect=(20,  212, 94,  72), fill=(80, 110, 185), text=(255, 255, 255)),
-    dict(key="next", rect=(126, 212, 94,  72), fill=(80, 110, 185), text=(255, 255, 255)),
+    dict(key="play", rect=(20,  20, 200, 80), fill=(70, 175, 120), text=(255, 255, 255)),
+    dict(key="stop", rect=(20, 110, 200, 60), fill=(195, 80, 80), text=(255, 255, 255)),
+    dict(key="prev", rect=(20,  180, 94,  60), fill=(80, 110, 185), text=(255, 255, 255)),
+    dict(key="next", rect=(126, 180, 94,  60), fill=(80, 110, 185), text=(255, 255, 255)),
 ]
-VOLBAR_RECT = (20, 292, 200, 20)
+VOLBAR_RECT = (20, 260, 200, 24)
 vol = 18
 BTN_CAL = (4, 4, 52, 30)             # top-left  CAL
 BTN_CFG = (W-56, 4, 52, 30)          # top-right CFG
@@ -657,16 +759,6 @@ def draw_ui(note=None):
     d = ImageDraw.Draw(img)
 
     # main buttons
-    for label, (x, y, w, h) in BUTTON_LAYOUT:
-        if label == "Stop":
-            fill = (180, 70, 70)
-        elif label in ("Prev", "Next"):
-            fill = (70, 100, 170)
-        else:
-            fill = (60, 170, 90)
-        d.rounded_rectangle([x, y, x + w, y + h], radius=16, fill=fill)
-        display_label = "Pause" if label == "Play" and playback_playing else label
-        draw_text_center(d, x, y, w, h, display_label, FONTB)
     for button in BUTTONS:
         x, y, w, h = button["rect"]
         label_key = button["key"]
@@ -778,7 +870,7 @@ def inside(rect, px, py):
 
 def update_volume_from_x(px):
     global vol
-    x, y, w, _ = volbar
+    x, y, w, _ = VOLBAR_RECT
     clamped = max(x, min(x + w, px))
     new_vol = int(round((clamped - x) * 30 / w))
     new_vol = max(0, min(30, new_vol))
@@ -859,12 +951,14 @@ def handle_tap(px, py):
             draw_ui()
         return
 
-    for label, rect in BUTTON_LAYOUT:
-        if inside(rect, px, py):
-            handle_button_press(label)
+    for button in BUTTONS:
+        if inside(button["rect"], px, py):
+            action = BUTTON_ACTIONS.get(button["key"])
+            if action:
+                action()
             return
 
-    if inside(volbar, px, py):
+    if inside(VOLBAR_RECT, px, py):
         update_volume_from_x(px)
 
 
@@ -1001,11 +1095,10 @@ def main_loop():
 
                 if touch_start is None:
                     touch_start = (px, py)
-                    if inside(volbar, px, py):
+                    if inside(VOLBAR_RECT, px, py):
                         drag_vol = True
                         last_drag = 0.0
                         update_volume_from_x(px)
-                px,py = scale_xy(med_rx, med_ry)
 
                 if not drag_vol and len(raw_bufx) == 4 and len(raw_bufy) == 4:
                     if inside(BTN_CFG, px, py):
@@ -1064,11 +1157,6 @@ def main_loop():
                     now = time.time()
                     if now - last_drag > 0.02:
                         update_volume_from_x(px)
-                        vx, vy, vw, vh = VOLBAR_RECT
-                        clamped = max(vx, min(vx + vw, px))
-                        vol = int((clamped - vx) * 30 / vw)
-                        vol_set(vol)
-                        draw_ui()
                         last_drag = now
 
 if __name__ == "__main__":
