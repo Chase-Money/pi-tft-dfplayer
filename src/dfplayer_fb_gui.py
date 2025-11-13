@@ -251,7 +251,11 @@ def read_dfplayer_response(timeout=0.3):
         return None
 
 def query_dfplayer_file_count():
-    """Query DFPlayer for number of files in /mp3 folder.
+    """Query DFPlayer for number of files.
+
+    Tries multiple query methods:
+    1. Command 0x48 - Total files on TF card (all folders)
+    2. Command 0x4C - Files in /mp3 folder specifically
 
     Returns:
         int: Number of files, or None if query failed
@@ -265,18 +269,39 @@ def query_dfplayer_file_count():
         if ser.in_waiting:
             ser.read(ser.in_waiting)
 
-        # Send query command 0x4C (get file count in /mp3 folder)
-        send(0x4C, 0, 0)
-        time.sleep(0.1)  # Give DFPlayer time to respond
+        # Try 0x48 first (total TF card files)
+        logger.info("Querying DFPlayer with 0x48 (total TF card files)...")
+        send(0x48, 0, 0)
+        time.sleep(0.2)  # Give DFPlayer time to respond
 
         response = read_dfplayer_response(timeout=0.5)
-        if response and response[3] == 0x4C:
-            file_count = (response[5] << 8) | response[6]
-            logger.info(f"DFPlayer reports {file_count} files in /mp3 folder")
-            return file_count
-        else:
-            logger.warning("DFPlayer did not respond to file count query")
-            return None
+        if response:
+            logger.info(f"0x48 response: {response.hex()}")
+            if response[3] == 0x48:
+                file_count = (response[5] << 8) | response[6]
+                logger.info(f"DFPlayer reports {file_count} total files on TF card")
+                if file_count > 0:
+                    return file_count
+
+        # Clear buffer and try 0x4C (mp3 folder)
+        if ser.in_waiting:
+            ser.read(ser.in_waiting)
+
+        logger.info("Querying DFPlayer with 0x4C (/mp3 folder files)...")
+        send(0x4C, 0, 0)
+        time.sleep(0.2)
+
+        response = read_dfplayer_response(timeout=0.5)
+        if response:
+            logger.info(f"0x4C response: {response.hex()}")
+            if response[3] == 0x4C:
+                file_count = (response[5] << 8) | response[6]
+                logger.info(f"DFPlayer reports {file_count} files in /mp3 folder")
+                return file_count
+
+        logger.warning("DFPlayer did not respond to file count queries (tried 0x48 and 0x4C)")
+        logger.warning("Consider creating config/track_catalog.txt with your track list")
+        return None
     except Exception as e:
         logger.error(f"Error querying DFPlayer file count: {e}")
         return None
@@ -1132,11 +1157,6 @@ def main_loop():
                     now = time.time()
                     if now - last_drag > 0.02:
                         update_volume_from_x(px)
-                        vx, vy, vw, vh = VOLBAR_RECT
-                        clamped = max(vx, min(vx + vw, px))
-                        vol = int((clamped - vx) * 30 / vw)
-                        vol_set(vol)
-                        draw_ui()
                         last_drag = now
 
 if __name__ == "__main__":
