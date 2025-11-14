@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import Callable, List, Optional, Sequence, Tuple
 
 from PIL import ImageDraw
@@ -29,10 +30,17 @@ class ButtonWidget:
         self.fill = fill
         self.text_color = text_color
         self.radius = radius
+        self._flash_until = 0.0
 
     def draw(self, draw: ImageDraw.ImageDraw, font) -> None:
         x, y, w, h = self.rect
-        draw.rounded_rectangle(xywh_to_xyxy(self.rect), radius=self.radius, fill=self.fill)
+        fill = self.fill
+        if time.monotonic() < self._flash_until:
+            r, g, b = self.fill
+            fill = (min(255, int(r + (255 - r) * 0.35)),
+                    min(255, int(g + (255 - g) * 0.35)),
+                    min(255, int(b + (255 - b) * 0.35)))
+        draw.rounded_rectangle(xywh_to_xyxy(self.rect), radius=self.radius, fill=fill)
         label = self.label() if callable(self.label) else self.label
         bbox = draw.textbbox((0, 0), label, font=font)
         tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
@@ -46,6 +54,7 @@ class ButtonWidget:
             return False
         if self._contains(pos):
             self.on_press()
+            self._flash_until = time.monotonic() + 0.15
             return True
         return False
 
@@ -145,14 +154,17 @@ class SliderWidget:
         self.min_value = min_value
         self.max_value = max_value
         self.value = min_value
+        self.display_value = float(self.value)
 
     def draw(self, draw: ImageDraw.ImageDraw, font=None) -> None:
         x, y, w, h = self.rect
         draw.rounded_rectangle(xywh_to_xyxy((x, y, w, h)), radius=h // 2, fill=(55, 60, 75))
-        fillw = int(w * (self.value - self.min_value) / max(1, self.max_value - self.min_value))
+        self.display_value += (self.value - self.display_value) * 0.2
+        self.display_value = max(self.min_value, min(self.max_value, self.display_value))
+        fillw = int(w * (self.display_value - self.min_value) / max(1, self.max_value - self.min_value))
         draw.rounded_rectangle(xywh_to_xyxy((x, y, fillw, h)), radius=h // 2, fill=(230, 195, 80))
         if font:
-            draw.text((x + w + 8, y - 4), f"{self.value:02d}", font=font, fill=(235, 235, 235))
+            draw.text((x + w + 8, y - 4), f"{int(round(self.display_value)):02d}", font=font, fill=(235, 235, 235))
 
     def handle_event(self, event: UIEvent) -> bool:
         if event.type != "drag":

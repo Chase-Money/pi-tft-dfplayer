@@ -25,6 +25,8 @@ class TouchEvent:
     dy: int = 0
     direction: Optional[str] = None  # 'up', 'down', 'left', 'right'
     timestamp: float = 0.0
+    raw_x: Optional[int] = None
+    raw_y: Optional[int] = None
 
 
 class TouchController:
@@ -146,7 +148,9 @@ class TouchController:
             type="press",
             x=sx,
             y=sy,
-            timestamp=self.press_time
+            timestamp=self.press_time,
+            raw_x=self.last_x,
+            raw_y=self.last_y,
         )
 
     def _handle_release(self) -> Optional[TouchEvent]:
@@ -173,7 +177,9 @@ class TouchController:
                 type="tap",
                 x=self.press_x,
                 y=self.press_y,
-                timestamp=release_time
+                timestamp=release_time,
+                raw_x=self.last_x,
+                raw_y=self.last_y,
             )
 
         elif distance >= self.swipe_threshold_px:
@@ -186,7 +192,9 @@ class TouchController:
                 dx=dx,
                 dy=dy,
                 direction=direction,
-                timestamp=release_time
+                timestamp=release_time,
+                raw_x=self.last_x,
+                raw_y=self.last_y,
             )
 
         else:
@@ -197,7 +205,9 @@ class TouchController:
                 y=sy,
                 dx=dx,
                 dy=dy,
-                timestamp=release_time
+                timestamp=release_time,
+                raw_x=self.last_x,
+                raw_y=self.last_y,
             )
 
     def _get_swipe_direction(self, dx: int, dy: int) -> str:

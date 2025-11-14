@@ -15,23 +15,21 @@ import os
 import sys
 import time
 import atexit
-from typing import Optional
+from typing import Optional, Tuple
 
-# Ensure the source directory is in the Python path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-from src.core.state_v2 import AppState
-from src.backends.dfplayer_v2 import DFPlayerBackend
-from src.hardware.framebuffer import Framebuffer
-from src.hardware.touch_controller import TouchController
-from src.ui.framework_v2.manager import ScreenManagerV2
-from src.ui.framework_v2.events import UIEvent
-from src.ui.renderer_v2 import FramebufferRendererV2
+from core.state_v2 import AppState
+from core.config import get_config, ORIENTS
+from backends.dfplayer_v2 import DFPlayerBackend
+from hardware.framebuffer import Framebuffer
+from hardware.touch_controller import TouchController
+from ui.framework_v2.manager import ScreenManagerV2
+from ui.framework_v2.events import UIEvent
+from ui.renderer_v2 import FramebufferRendererV2
 
 # Import V2 screens
-from src.ui.screens_v2.home import HomeScreen
-from src.ui.screens_v2.track_browser import TrackBrowserScreen
-from src.ui.screens_v2.now_playing import NowPlayingScreen
+from ui.screens_v2.home import HomeScreen
+from ui.screens_v2.track_browser import TrackBrowserScreen
+from ui.screens_v2.now_playing import NowPlayingScreen
 
 logging.basicConfig(
     level=logging.INFO,
@@ -67,6 +65,8 @@ class DFPlayerTFTApp:
         self.fb_device = fb_device
         self.touch_device = touch_device
 
+        self.config = get_config()
+
         # Core components (initialized in _init_*)
         self.framebuffer: Optional[Framebuffer] = None
         self.touch: Optional[TouchController] = None
@@ -77,6 +77,10 @@ class DFPlayerTFTApp:
 
         # Runtime state
         self.running = False
+        self.orientation_index = self.config.get_touch_orientation()
+        self._status_message: Optional[str] = None
+        self._status_level: str = "info"
+        self._status_expiry: float = 0.0
 
         # Register cleanup handler
         atexit.register(self.cleanup)
@@ -91,31 +95,57 @@ class DFPlayerTFTApp:
         try:
             logger.info("Initializing DFPlayer TFT Application")
 
-            # Initialize hardware
+            # Initialize hardware (framebuffer is required, touch is optional)
             if not self._init_framebuffer():
+                logger.error("Framebuffer initialization failed - cannot continue")
                 return False
+
             if not self._init_touch():
+                logger.warning("Touch controller initialization failed - continuing without touch input")
+                self.set_status("Touch controller unavailable", level="warning", duration=6)
+            # Continue anyway - app can still run without touch for testing
+
+            # Initialize backend (optional - app can run without DFPlayer)
+            if not self._init_backend():
+                logger.warning("DFPlayer backend initialization failed - continuing anyway")
+                self.set_status("DFPlayer backend unavailable", level="warning", duration=6)
+
+            # Initialize state (always succeeds with fallback tracks)
+            try:
+                self._init_state()
+            except Exception as e:
+                logger.error(f"State initialization failed: {e}", exc_info=True)
+                self.set_status("Unable to initialize track catalog", level="error", duration=6)
                 return False
 
-            # Initialize backend
-            if not self._init_backend():
-                logger.warning("DFPlayer backend initialization failed, continuing anyway")
+            # Initialize UI framework (critical)
+            try:
+                self._init_screen_manager()
+                self._init_renderer()
+            except Exception as e:
+                logger.error(f"UI framework initialization failed: {e}", exc_info=True)
+                return False
 
-            # Initialize state
-            self._init_state()
-
-            # Initialize UI framework
-            self._init_screen_manager()
-            self._init_renderer()
-
-            # Register screens
-            self._register_screens()
+            # Register screens (critical)
+            try:
+                self._register_screens()
+            except Exception as e:
+                logger.error(f"Screen registration failed: {e}", exc_info=True)
+                return False
 
             logger.info("Application initialization complete")
+            if not self.touch:
+                self.set_status("Touch disabled: check wiring", level="warning", duration=8)
+            if self.state and not self.state.tracks:
+                self.set_status("No tracks found", level="warning", duration=6)
+            logger.info(f"  Framebuffer: {'OK' if self.framebuffer else 'FAILED'}")
+            logger.info(f"  Touch: {'OK' if self.touch else 'NOT AVAILABLE'}")
+            logger.info(f"  Backend: {'OK' if self.backend else 'NOT AVAILABLE'}")
+            logger.info(f"  Tracks: {len(self.state.tracks) if self.state else 0}")
             return True
 
         except Exception as e:
-            logger.error(f"Initialization failed: {e}", exc_info=True)
+            logger.error(f"Initialization failed with unexpected error: {e}", exc_info=True)
             return False
 
     def _init_framebuffer(self) -> bool:
@@ -133,10 +163,11 @@ class DFPlayerTFTApp:
         try:
             self.touch = TouchController(device=self.touch_device)
             logger.info("Touch controller initialized")
+            self._apply_touch_settings()
             return True
         except Exception as e:
-            logger.error(f"Failed to initialize touch controller: {e}")
-            logger.error("Touch input will not be available")
+            logger.warning(f"Failed to initialize touch controller: {e}")
+            self.touch = None
             return False
 
     def _init_backend(self) -> bool:
@@ -153,27 +184,161 @@ class DFPlayerTFTApp:
             logger.error(f"Failed to initialize DFPlayer backend: {e}")
             return False
 
-    def _init_state(self) -> None:
-        """Initialize application state."""
-        # Load mock tracks for testing
-        # In production, these would be loaded from track catalog
-        mock_tracks = [
-            {"number": 1, "title": "Track 001", "artist": "Artist 1"},
-            {"number": 2, "title": "Track 002", "artist": "Artist 2"},
-            {"number": 3, "title": "Track 003", "artist": "Artist 3"},
-            {"number": 4, "title": "Track 004", "artist": "Artist 4"},
-            {"number": 5, "title": "Track 005", "artist": "Artist 5"},
+    def _load_tracks(self) -> list:
+        """
+        Load track catalog from file or DFPlayer query.
+
+        Searches for catalog file in multiple locations:
+        1. DFPLAYER_TRACK_CATALOG environment variable
+        2. config/track_catalog.txt (relative to project root)
+        3. /boot/dfplayer_tracks.txt
+        4. Query DFPlayer for file count (fallback)
+
+        File format (one track per line):
+        - "number|title" format (pipe-separated)
+        - "number title" format (space-separated)
+        - Lines starting with # are comments
+
+        Returns:
+            list: List of track dictionaries
+        """
+        # Build search paths
+        search_paths = []
+
+        # Environment variable
+        env_path = os.environ.get("DFPLAYER_TRACK_CATALOG")
+        if env_path:
+            search_paths.append(env_path)
+
+        # Default locations
+        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        search_paths.extend([
+            os.path.join(base_dir, "config", "track_catalog.txt"),
+            "/boot/dfplayer_tracks.txt",
+        ])
+
+        # Try to load from each path
+        for path in search_paths:
+            if os.path.exists(path):
+                tracks = self._parse_catalog_file(path)
+                if tracks:
+                    self.set_status(f"Loaded {len(tracks)} tracks", level="info", duration=4)
+                    logger.info(f"Loaded {len(tracks)} tracks from {path}")
+                    return tracks
+
+        # Fallback: Query DFPlayer for file count
+        if self.backend:
+            try:
+                file_count = self.backend.query_file_count()
+                if file_count and file_count > 0:
+                    logger.info(f"DFPlayer reported {file_count} files, generating placeholder tracks")
+                    return [
+                        {"number": i + 1, "title": f"Track {i + 1:03d}"}
+                        for i in range(file_count)
+                    ]
+            except Exception as e:
+                logger.warning(f"Failed to query DFPlayer file count: {e}")
+
+        # Final fallback: Generate 30 placeholder tracks
+        logger.warning("No track catalog found, generating 30 placeholder tracks")
+        self.set_status("No track catalog found - using placeholders", level="warning", duration=6)
+        return [
+            {"number": i + 1, "title": f"Track {i + 1:03d}"}
+            for i in range(30)
         ]
 
-        self.state = AppState(tracks=mock_tracks)
-        logger.info(f"State initialized with {len(mock_tracks)} tracks")
+    def _parse_catalog_file(self, path: str) -> list:
+        """
+        Parse track catalog file.
+
+        Args:
+            path: Path to catalog file
+
+        Returns:
+            list: List of track dictionaries or empty list if parsing fails
+        """
+        tracks = []
+
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                for line_num, line in enumerate(f, 1):
+                    line = line.strip()
+
+                    # Skip empty lines and comments
+                    if not line or line.startswith("#"):
+                        continue
+
+                    # Parse line
+                    try:
+                        track = self._parse_catalog_line(line)
+                        if track:
+                            tracks.append(track)
+                    except Exception as e:
+                        logger.warning(f"Error parsing line {line_num} in {path}: {e}")
+                        continue
+
+        except Exception as e:
+            logger.error(f"Failed to read catalog file {path}: {e}")
+            return []
+
+        if tracks:
+            # Sort by track number
+            tracks.sort(key=lambda t: t["number"])
+
+        return tracks
+
+    def _parse_catalog_line(self, line: str) -> Optional[dict]:
+        """
+        Parse single catalog line.
+
+        Args:
+            line: Catalog line
+
+        Returns:
+            dict: Track dictionary or None if invalid
+        """
+        # Try pipe-separated format first
+        if "|" in line:
+            num_str, title = line.split("|", 1)
+            num_str = num_str.strip()
+            title = title.strip()
+        else:
+            # Try space-separated format
+            parts = line.split(None, 1)
+            if not parts:
+                return None
+
+            num_str = parts[0]
+            title = parts[1].strip() if len(parts) > 1 else ""
+
+        # Parse track number
+        try:
+            track_no = int(num_str, 10)
+        except ValueError:
+            logger.warning(f"Invalid track number: {num_str}")
+            return None
+
+        # Default title if empty
+        if not title:
+            title = f"Track {track_no:03d}"
+
+        return {"number": track_no, "title": title}
+
+    def _init_state(self) -> None:
+        """Initialize application state."""
+        # Load tracks from catalog file or DFPlayer query
+        tracks = self._load_tracks()
+
+        self.state = AppState(tracks=tracks)
+        logger.info(f"State initialized with {len(tracks)} tracks")
 
     def _init_screen_manager(self) -> None:
         """Initialize the screen manager with services."""
         services = {
             "state": self.state,
             "backend": self.backend,
-            "app": self
+            "app": self,
+            "config": self.config,
         }
 
         self.screen_manager = ScreenManagerV2(services=services)
@@ -192,7 +357,12 @@ class DFPlayerTFTApp:
         self.screen_manager.register("home", HomeScreen)
         self.screen_manager.register("track_browser", TrackBrowserScreen)
         self.screen_manager.register("now_playing", NowPlayingScreen)
-        logger.info("Screens registered: home, track_browser, now_playing")
+        from ui.screens_v2.settings import SettingsScreen
+        from ui.screens_v2.calibration import CalibrationScreen
+
+        self.screen_manager.register("settings", SettingsScreen)
+        self.screen_manager.register("calibration", CalibrationScreen)
+        logger.info("Screens registered: home, track_browser, now_playing, settings, calibration")
 
     def run(self) -> None:
         """
@@ -277,23 +447,24 @@ class DFPlayerTFTApp:
         """
         # Map touch event types to UI events
         event_type = getattr(touch_event, 'type', None)
+        raw_payload = {"raw": (touch_event.raw_x, touch_event.raw_y)} if touch_event.raw_x is not None else {}
 
         if event_type == 'tap':
             return UIEvent(
                 "tap",
                 payload={
-                    "x": touch_event.x,
-                    "y": touch_event.y
+                    "pos": (touch_event.x, touch_event.y),
+                    **raw_payload
                 }
             )
         elif event_type == 'drag':
             return UIEvent(
                 "drag",
                 payload={
-                    "x": touch_event.x,
-                    "y": touch_event.y,
+                    "pos": (touch_event.x, touch_event.y),
                     "dx": getattr(touch_event, 'dx', 0),
-                    "dy": getattr(touch_event, 'dy', 0)
+                    "dy": getattr(touch_event, 'dy', 0),
+                    **raw_payload
                 }
             )
         elif event_type == 'swipe':
@@ -301,43 +472,132 @@ class DFPlayerTFTApp:
                 "swipe",
                 payload={
                     "direction": touch_event.direction,
-                    "delta": getattr(touch_event, 'delta', 0)
+                    "delta": getattr(touch_event, 'delta', 0),
+                    **raw_payload
                 }
             )
 
         return None
 
     def cleanup(self) -> None:
-        """Clean up all resources."""
+        """
+        Clean up all resources in proper order.
+
+        Order:
+        1. Stop main loop
+        2. Clean up backend (stop playback)
+        3. Clean up UI (renderer, screen manager)
+        4. Clean up hardware (touch, framebuffer)
+        """
         logger.info("Cleaning up application resources")
 
+        # Stop main loop
         self.running = False
+
+        # Clean up backend first (stop any ongoing operations)
+        try:
+            if self.backend:
+                logger.debug("Shutting down backend")
+                self.backend.shutdown()
+                self.backend = None
+        except Exception as e:
+            logger.error(f"Error shutting down backend: {e}", exc_info=True)
+
+        # Clean up UI components
+        try:
+            if self.screen_manager:
+                logger.debug("Cleaning up screen manager")
+                # Screen manager doesn't have cleanup but clear reference
+                self.screen_manager = None
+        except Exception as e:
+            logger.error(f"Error cleaning up screen manager: {e}", exc_info=True)
 
         try:
             if self.renderer:
+                logger.debug("Closing renderer")
                 self.renderer.close()
+                self.renderer = None
         except Exception as e:
-            logger.error(f"Error closing renderer: {e}")
+            logger.error(f"Error closing renderer: {e}", exc_info=True)
+
+        # Clean up hardware (touch then framebuffer)
+        try:
+            if self.touch:
+                logger.debug("Closing touch controller")
+                self.touch.close()
+                self.touch = None
+        except Exception as e:
+            logger.error(f"Error closing touch controller: {e}", exc_info=True)
 
         try:
             if self.framebuffer:
+                logger.debug("Closing framebuffer")
                 self.framebuffer.close()
+                self.framebuffer = None
         except Exception as e:
-            logger.error(f"Error closing framebuffer: {e}")
-
-        try:
-            if self.touch:
-                self.touch.close()
-        except Exception as e:
-            logger.error(f"Error closing touch controller: {e}")
-
-        try:
-            if self.backend:
-                self.backend.shutdown()
-        except Exception as e:
-            logger.error(f"Error shutting down backend: {e}")
+            logger.error(f"Error closing framebuffer: {e}", exc_info=True)
 
         logger.info("Cleanup complete")
+
+    # ------------------------------------------------------------------
+    # Touch helpers / status helpers
+
+    def _apply_touch_settings(self) -> None:
+        if not self.touch or not self.touch.available:
+            return
+        cal = self.config.get_touch_calibration()
+        if cal:
+            self.touch.set_calibration(*cal)
+        idx = self.config.get_touch_orientation()
+        self.orientation_index = idx % len(ORIENTS)
+        orient = ORIENTS[self.orientation_index]
+        self.touch.set_orientation(
+            swap_xy=orient["SWAP_XY"],
+            flip_x=orient["FLIP_X"],
+            flip_y=orient["FLIP_Y"],
+        )
+
+    def set_touch_orientation(self, index: int) -> None:
+        self.orientation_index = index % len(ORIENTS)
+        orient = ORIENTS[self.orientation_index]
+        if self.touch:
+            self.touch.set_orientation(
+                swap_xy=orient["SWAP_XY"],
+                flip_x=orient["FLIP_X"],
+                flip_y=orient["FLIP_Y"],
+            )
+        self.config.set_touch_orientation(self.orientation_index)
+        self.config.save()
+        self.set_status(f"Orientation {self.orientation_index + 1}/8 saved", level="info", duration=4)
+
+    def set_touch_calibration(self, calibration: Tuple[int, int, int, int]) -> None:
+        self.config.set_touch_calibration(*calibration)
+        self.config.save()
+        if self.touch:
+            self.touch.set_calibration(*calibration)
+        self.set_status("Calibration applied", level="success", duration=4)
+
+    def get_touch_orientation(self) -> dict:
+        return ORIENTS[self.orientation_index]
+
+    def get_touch_driver_bounds(self) -> Optional[Tuple[int, int, int, int]]:
+        if self.touch and getattr(self.touch, "touch", None):
+            t = self.touch.touch
+            return (t.min_x, t.max_x, t.min_y, t.max_y)
+        return None
+
+    def set_status(self, message: str, level: str = "info", duration: float = 3.0) -> None:
+        self._status_message = message
+        self._status_level = level
+        self._status_expiry = time.time() + duration
+
+    def get_status(self) -> Optional[Tuple[str, str]]:
+        if not self._status_message:
+            return None
+        if time.time() > self._status_expiry:
+            self._status_message = None
+            return None
+        return self._status_message, self._status_level
 
 
 def main():

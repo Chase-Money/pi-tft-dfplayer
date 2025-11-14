@@ -3,12 +3,8 @@
 Main entry point for the v3 application using the v2 UI framework.
 """
 import sys
-import os
 
-# Ensure the source directory is in the Python path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-from src.app_v2 import Application
+from app_v2 import Application
 
 def main():
     """Initializes and runs the application."""
@@ -24,4 +20,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

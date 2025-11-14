@@ -1,82 +1,80 @@
-pi-tft-dfplayer
+# pi-tft-dfplayer
 
-DIY touchscreen MP3 player for Raspberry Pi Zero 2 W with a 3.5″ SPI TFT (ILI9486 + XPT2046/ADS7846) and a DFPlayer Mini.
-Direct-to-framebuffer UI (no X/Wayland), on-device touch calibration, orientation cycling, and UART control of DFPlayer.
+DIY touchscreen MP3 player for a Raspberry Pi Zero 2 W paired with a 3.5″ SPI TFT (ILI9486 + XPT2046/ADS7846) and a DFPlayer Mini. The UI renders directly to `/dev/fb1`, runs without X/Wayland, ships on-device calibration/orientation tools, and talks to the DFPlayer over UART.
 
-Features
-	•	Direct /dev/fb1 drawing (RGB565) → fast, no desktop needed
-	•	On-device CAL (four-point) and CFG (8 orientations) buttons
-	•	Big Play/Prev/Next/Stop controls
-	•	Smooth volume bar (0–30) via DFPlayer command 0x06
-	•	Systemd service for auto-start
+## Highlights
+- Direct RGB565 drawing to `/dev/fb1` → no desktop stack required
+- On-device CAL (four-point) + CFG (8 orientations) workflows
+- Large Play/Prev/Next/Stop controls tuned for fingers
+- Hardware volume bar (0–30) via DFPlayer 0x06 command
+- Systemd service for auto-start on boot
 
-Hardware
-	•	Raspberry Pi Zero 2 W (32-bit Pi OS used here)
-	•	3.5″ SPI TFT ILI9486 w/ resistive touch XPT2046/ADS7846
-	•	DFPlayer Mini (micro-SD with /mp3/0001.mp3, /mp3/0002.mp3, …)
-	•	4–8 Ω speaker on DFPlayer SPK+ / SPK-
+## Hardware
+- Raspberry Pi Zero 2 W (32-bit Pi OS)
+- 3.5″ SPI TFT ILI9486 with XPT2046/ADS7846 touch controller
+- DFPlayer Mini + micro-SD (`/mp3/0001.mp3`, `/mp3/0002.mp3`, …)
+- 4–8 Ω speaker tied to DFPlayer `SPK+ / SPK-`
 
-Wiring (summary)
-	•	TFT to SPI0 + its control pins (per your panel’s pinout):
-	•	LCD_CS → a free chip-select (often GPIO8/CE0)
-	•	LCD_SCK → GPIO11/SCLK
-	•	LCD_SI(MOSI) → GPIO10/MOSI
-	•	LCD_RS(DC) → a free GPIO (panel doc)
-	•	LCD_RST → a free GPIO or Pi reset
-	•	5 V and GND to Pi 5 V/GND
-	•	Touch (XPT2046/ADS7846) on same SPI bus:
-	•	TP_CS → another CS (often GPIO7/CE1)
-	•	TP_SCK/TP_SI share SCLK/MOSI, TP_SO to MISO (GPIO9)
-	•	TP_IRQ to a free GPIO (optional interrupt)
-	•	DFPlayer:
-	•	VCC → 5 V, GND → GND
-	•	RX  ← Pi TXD0 (GPIO14)
-	•	TX  → Pi RXD0 (GPIO15) (optional, for query)
-	•	SPK+ / SPK- → speaker
+## Wiring Summary
+- **Display (SPI0)**
+  - `LCD_CS` → GPIO8/CE0 (or any spare chip-select)
+  - `LCD_SCK` → GPIO11/SCLK
+  - `LCD_SI (MOSI)` → GPIO10/MOSI
+  - `LCD_RS (DC)` → spare GPIO (per panel docs)
+  - `LCD_RST` → spare GPIO (or Pi reset)
+  - `5V/GND` → Pi power pins
+- **Touch (same SPI bus)**
+  - `TP_CS` → GPIO7/CE1
+  - `TP_SCK`, `TP_SI` share SCLK/MOSI, `TP_SO` → GPIO9/MISO
+  - `TP_IRQ` → spare GPIO (optional interrupt)
+- **DFPlayer**
+  - `VCC` → 5V, `GND` → ground
+  - `RX` ← Pi `TXD0` (GPIO14)
+  - `TX` → Pi `RXD0` (GPIO15, optional for responses)
+  - `SPK+ / SPK-` → speaker
 
-If your panel already exposes a ready-made overlay (e.g., fb_ili9486/ads7846), you should see /dev/fb1 and a touch event* device. This app works as long as those exist.
+If your TFT exposes an overlay such as `fb_ili9486` + `ads7846`, `/dev/fb1` and a touch event device will appear automatically—this app only requires those device nodes.
 
-Software versions (snapshot)
+## Software Snapshot
+- Linux kernel: `uname -a`
+- Pi OS release: `/etc/os-release`
+- Python: `python3 --version`
+- Packages: `python3-serial`, `python3-evdev`, `python3-pil` (Pillow)
 
-This repo was built/tested on:
-	•	Linux kernel: output of uname -a
-	•	Pi OS: contents of /etc/os-release
-	•	Python: python3 --version
-	•	Packages: python3-serial, python3-evdev, python3-pil (Pillow)
+Generate a `SYSTEM.md` snapshot at any time:
 
-You can regenerate a SYSTEM.md with:
-
+```bash
 ./scripts/system_snapshot.sh
+```
 
-Quick start
+## Quick Start
+1. **Install dependencies**
+   ```bash
+   ./scripts/install_prereqs.sh
+   ```
+2. **Apply UART + touch tweaks** (frees UART0, installs udev alias) and reboot:
+   ```bash
+   ./scripts/apply_system_tweaks.sh
+   sudo reboot
+   ```
+3. **Verify devices after reboot**
+   ```bash
+   ls /dev/fb1
+   cat /sys/class/graphics/fb1/name   # should mention ili948x
+   ls /dev/input/event*               # confirm touchscreen present
+   ```
+4. **Run manually**
+   ```bash
+   sudo -E python3 src/dfplayer_fb_gui.py
+   ```
+5. **Or install the service**
+   ```bash
+   sudo cp systemd/dfplayer-fb.service /etc/systemd/system/
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now dfplayer-fb
+   ```
 
-# 1) Get deps
-./scripts/install_prereqs.sh
-
-# 2) Apply system tweaks (frees UART0 for DFPlayer, udev rule for touch)
-./scripts/apply_system_tweaks.sh
-sudo reboot
-
-After reboot, verify:
-
-ls /dev/fb1
-cat /sys/class/graphics/fb1/name        # should mention ili948x
-ls /dev/input/event*                     # touch present
-
-Run the app
-
-# manual test
-sudo -E python3 src/dfplayer_fb_gui.py
-
-# or enable service
-sudo cp systemd/dfplayer-fb.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now dfplayer-fb
-
-> **Note:** The systemd unit expects this repository to live at
-> `/home/pi/pi-tft-dfplayer`. If you clone it elsewhere, update
-> `WorkingDirectory` in `systemd/dfplayer-fb.service` (or create a drop-in) so
-> the service can locate `src/dfplayer_fb_gui.py`.
+> **Note:** The systemd unit assumes the repo lives at `/home/pi/pi-tft-dfplayer`. If you clone elsewhere, update `WorkingDirectory` in `systemd/dfplayer-fb.service` (or provide a drop-in) so the service can locate `src/dfplayer_fb_gui.py`.
 
 Hardware profiles (v2)
 
@@ -101,7 +99,12 @@ This repo now ships v2 launchers for two hardware profiles that run independentl
    - Button HAT: `DFPLAYER_HW_PROFILE=st7735_buttons python3 src/main_v2.py` (add `DFPLAYER_USE_EMULATOR=1` on desktops).
 2. **Preview the new screen manager** by exporting `DFPLAYER_UI_FRAMEWORK=1` before running `python3 src/main.py`. This now boots the full `src/app_v2.Application` stack (AppState + ScreenManagerV2 + DFPlayer backend) instead of the ad-hoc adapter embedded in `main.py`.
 3. **Exercise the Application/AppState stack** via `python3 src/main_v3.py`. This boots `src/app_v2.Application`, initializes the shared AppState + ScreenManagerV2, and is the entrypoint we will promote once the migration branch is merged.
-4. **Capture validation details** in `docs/smoke_test_checklist_v2.md` (hardware used, commands run, observations) so the next developer can resume testing exactly where you stopped.
+4. **Touch settings live under the new Settings screen** (Home → Settings). Orientation changes apply immediately, and the Calibration workflow saves touch bounds back into the config.
+5. **Capture validation details** in `docs/smoke_test_checklist_v2.md` (hardware used, commands run, observations) so the next developer can resume testing exactly where you stopped.
+
+### Agent / CLI Scratch Notes
+- Keep long-form context or “memory” notes in `.agent-notes/` (create it locally if it doesn’t exist). That directory is ignored by git so these files stay on your machine.
+- If a note graduates into actual project documentation, move it into `docs/` (or update an existing doc) and commit it like any other change. This keeps the repo history tidy while still giving agents a place for ephemeral context.
 
 Profile selection
 

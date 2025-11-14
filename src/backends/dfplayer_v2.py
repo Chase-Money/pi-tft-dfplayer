@@ -132,3 +132,7 @@ class DFPlayerBackend:
         if self.ser and self.ser.is_open:
             self.ser.close()
             logger.info("Serial port closed.")
+
+    def shutdown(self):
+        """Alias for cleanup() for compatibility with main app."""
+        self.cleanup()

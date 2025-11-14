@@ -143,6 +143,20 @@ Updated
   - Touch handling now differentiates taps vs drags, dispatches `drag_end` events, and includes previous points in drag payloads so widgets can implement inertial scrolling or sliders without hacks.
 - `README.md`, `docs/PHASE_2_IMPLEMENTATION_SUMMARY.md`, `docs/PHASE2_STATUS_2025-11-13.md`
   - Documented the new entrypoint flow and noted that the ScreenManager integration is now live for the touchscreen profile.
+- `README.md`
+  - Reorganized the opening sections with proper headings, bullet lists, and fenced code blocks so hardware requirements, wiring, software snapshot, and quick-start instructions are easier to scan.
+- `.gitignore`, `README.md`
+  - Added a dedicated `.agent-notes/` scratch directory (ignored by git) and documented how to use it so CLI/LLM context files stay local while curated docs remain tracked.
+- `src/ui/screens_v2/calibration.py`, `src/ui/screens_v2/settings.py`
+  - New calibration workflow (four-point tap targets, raw driver inversion, config persistence) and a settings hub for orientation cycling + calibration entry.
+- `src/ui/screens_v2/home.py`, `src/ui/screens_v2/track_browser.py`, `src/ui/screens_v2/now_playing.py`
+  - Added status-banner overlays, button feedback, slider smoothing, track list drag scrolling, artwork placeholders, and quick access to settings.
+- `src/ui/framework_v2/widgets.py`
+  - Button flash feedback, slider easing, and list pixel-scroll helpers to make the v2 UI feel responsive.
+- `src/main_tft_v2.py`, `src/hardware/touch_controller.py`
+  - Touch events now carry raw coordinates, configuration-driven orientation/calibration is respected, status messaging is exposed to screens, and new screens are registered with the manager.
+- `README.md`
+  - Documented the Settings/Calibration flow under the Phase 2 pilot instructions.
 
 Validation
 - `pytest -q tests/ui/test_draw_utils_v2.py tests/ui/test_widgets_v2.py tests/ui/test_views_v2.py tests/core/test_profile_select_v3.py tests/core/test_profile_select_v2.py tests/hardware/test_display_st7735.py tests/hardware/test_button_input.py tests/main/test_main_touch_v2.py`

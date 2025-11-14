@@ -14,6 +14,7 @@ from ..views_v2 import (
     draw_artwork_panel,
     draw_title_line,
     draw_volume_bar,
+    draw_status_banner,
 )
 
 
@@ -35,6 +36,11 @@ class NowPlayingScreen(ScreenView):
         fonts = context["fonts"]
         
         draw.rectangle((0, 0, image.width, image.height), fill=(12, 16, 24))
+        app = self.services.get("app") if self.services else None
+        if app:
+            status = app.get_status()
+            if status:
+                draw_status_banner(draw, status[0], image.width, fonts, status[1])
         self.back_button.draw(draw, fonts["small"])
 
         if not self.state:
@@ -52,7 +58,11 @@ class NowPlayingScreen(ScreenView):
 
         draw_play_indicator(draw, playing, (16, 60), fonts["medium"])
         draw_track_number(draw, number, (60, 62), fonts["medium"])
-        draw_artwork_panel(image, draw, artwork, (16, 80, 200, 120))
+        if artwork:
+            draw_artwork_panel(image, draw, artwork, (16, 80, 200, 120))
+        else:
+            draw.rectangle((16, 80, 216, 200), outline=(80, 80, 90), width=2)
+            draw.text((24, 140), "No artwork", font=fonts["small"], fill=(200, 200, 210))
         draw_title_line(draw, title, (16, 200), fonts["small"], max_chars=30)
         
         self.play_button.draw(draw, fonts["small"])

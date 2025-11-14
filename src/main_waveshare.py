@@ -3,12 +3,8 @@
 Main entry point for the Waveshare 1.44" LCD HAT variant.
 """
 import sys
-import os
 
-# Ensure the source directory is in the Python path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-from src.app_waveshare import ApplicationWaveshare
+from app_waveshare import ApplicationWaveshare
 
 def main():
     """Initializes and runs the Waveshare application variant."""
@@ -28,4 +24,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

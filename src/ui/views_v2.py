@@ -62,3 +62,18 @@ def draw_volume_bar(draw, volume: int, rect_xywh: Tuple[int, int, int, int], bg=
     draw.rectangle(xywh_to_xyxy((x, y, w, h)), fill=bg)
     fillw = int((w) * v / 30)
     draw.rectangle(xywh_to_xyxy((x, y, fillw, h)), fill=fg)
+
+
+def draw_status_banner(draw, text: str, width: int, fonts, level: str = "info") -> None:
+    if not PIL_AVAILABLE or not text:
+        return
+    colors = {
+        "info": ((30, 45, 65), (215, 225, 235)),
+        "warning": ((90, 65, 25), (255, 235, 190)),
+        "error": ((90, 32, 32), (255, 205, 205)),
+        "success": ((30, 70, 45), (210, 240, 210)),
+    }
+    bg, fg = colors.get(level, colors["info"])
+    draw.rectangle((0, 0, width, 32), fill=bg)
+    font = fonts.get("small") if isinstance(fonts, dict) else None
+    draw.text((12, 8), text, font=font, fill=fg)

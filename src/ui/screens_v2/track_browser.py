@@ -7,6 +7,7 @@ from PIL import Image, ImageDraw, ImageFont
 from ..framework_v2.manager import ScreenView
 from ..framework_v2.widgets import ListWidget, ButtonWidget
 from ..framework_v2.events import UIEvent
+from ..views_v2 import draw_status_banner
 
 
 class TrackBrowserScreen(ScreenView):
@@ -20,6 +21,7 @@ class TrackBrowserScreen(ScreenView):
         self.back_button = ButtonWidget((16, 4, 80, 40), "Back", self.manager.pop)
         self.list_rect = (16, 60, 224, 200)
         self._scrolling = False
+        self._last_drag_delta = 0.0
 
     def on_enter(self, **kwargs) -> None:
         """Ensure the list is up-to-date when the screen is shown."""
@@ -34,6 +36,11 @@ class TrackBrowserScreen(ScreenView):
         draw: ImageDraw.ImageDraw = context["draw"]
         fonts = context["fonts"]
         draw.rectangle((0, 0, image.width, image.height), fill=(12, 16, 24))
+        app = self.services.get("app") if self.services else None
+        if app:
+            status = app.get_status()
+            if status:
+                draw_status_banner(draw, status[0], image.width, fonts, status[1])
         draw.text((110, 12), "Tracks", font=fonts["medium"], fill=(235, 235, 235))
         self.back_button.draw(draw, fonts["small"])
 
@@ -51,16 +58,14 @@ class TrackBrowserScreen(ScreenView):
     def handle_event(self, event: UIEvent) -> bool:
         if event.type == "drag":
             pos = event.get_point()
-            prev = (event.payload or {}).get("prev")
-            if pos and prev and self._point_in_list(pos):
-                delta_px = pos[1] - prev[1]
-                if self._scroll_list(delta_px):
+            dx = (event.payload or {}).get("dx", 0)
+            dy = (event.payload or {}).get("dy", 0)
+            if pos and self._point_in_list(pos):
+                if self._scroll_list(-dy):
                     self._scrolling = True
+                    self._last_drag_delta = -dy
                     return True
-        if event.type == "drag_end":
-            if self._scrolling:
                 self._scrolling = False
-                return True
         if event.type == "swipe":
             payload = event.payload or {}
             delta = payload.get("delta", 0)
@@ -78,6 +83,10 @@ class TrackBrowserScreen(ScreenView):
                     # Navigate to now playing screen after selection
                     self.manager.push("now_playing")
                     return True
+        if self._scrolling and event.type == "tap":
+            # Swallow tap immediately after a drag to avoid accidental activation
+            self._scrolling = False
+            return True
         return False
 
     def _play_index(self, idx: int) -> None:
