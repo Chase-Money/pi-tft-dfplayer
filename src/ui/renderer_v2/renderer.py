@@ -67,19 +67,39 @@ class FramebufferRendererV2:
         logger.info(f"Renderer initialized: {self.width}x{self.height}")
 
     def _load_default_fonts(self) -> None:
-        """Pre-load commonly used font sizes."""
-        sizes = {
+        """
+        Pre-load commonly used font sizes, scaled for screen resolution.
+
+        Font sizes are scaled relative to a 480px wide baseline:
+        - 128px wide: fonts are ~27% of baseline
+        - 320px wide: fonts are ~67% of baseline
+        - 480px wide: fonts are 100% of baseline
+        """
+        # Base sizes designed for 480px width
+        base_sizes = {
             "small": 14,
             "medium": 18,
             "large": 24,
             "xlarge": 32
         }
 
-        for name, size in sizes.items():
+        # Scale factor based on screen width (480px is baseline)
+        scale = min(self.width / 480.0, self.height / 320.0)
+
+        # Clamp scale to reasonable range
+        scale = max(0.25, min(1.5, scale))
+
+        logger.info(f"Font scale factor: {scale:.2f} for {self.width}x{self.height}")
+
+        for name, base_size in base_sizes.items():
+            # Scale the font size, minimum 8px for readability
+            scaled_size = max(8, int(base_size * scale))
+
             try:
-                self._fonts[name] = ImageFont.truetype(self._default_font_path, size)
+                self._fonts[name] = ImageFont.truetype(self._default_font_path, scaled_size)
+                logger.debug(f"Loaded font '{name}': {scaled_size}px")
             except Exception as e:
-                logger.warning(f"Failed to load font '{name}' ({size}px): {e}")
+                logger.warning(f"Failed to load font '{name}' ({scaled_size}px): {e}")
                 # Fallback to default bitmap font
                 self._fonts[name] = ImageFont.load_default()
 
@@ -126,7 +146,10 @@ class FramebufferRendererV2:
             "draw": self.draw,
             "fonts": self._fonts,
             "width": self.width,
-            "height": self.height
+            "height": self.height,
+            "scale_rect": self.scale_rect,
+            "scale_value": self.scale_value,
+            "scale": min(self.width / 480.0, self.height / 320.0)  # Uniform scale factor
         }
 
         # Let the screen manager render the current screen
@@ -164,6 +187,54 @@ class FramebufferRendererV2:
         """
         self.render()
         self.present()
+
+    def scale_rect(self, x_pct: float, y_pct: float, w_pct: float, h_pct: float) -> tuple:
+        """
+        Convert percentage-based rectangle to pixel coordinates.
+
+        Args:
+            x_pct: X position as percentage of width (0.0 - 1.0)
+            y_pct: Y position as percentage of height (0.0 - 1.0)
+            w_pct: Width as percentage of screen width (0.0 - 1.0)
+            h_pct: Height as percentage of screen height (0.0 - 1.0)
+
+        Returns:
+            (x, y, width, height) tuple in pixels
+
+        Example:
+            # Button at 10% from left, 20% from top, 80% wide, 15% tall
+            rect = renderer.scale_rect(0.1, 0.2, 0.8, 0.15)
+        """
+        return (
+            int(x_pct * self.width),
+            int(y_pct * self.height),
+            int(w_pct * self.width),
+            int(h_pct * self.height)
+        )
+
+    def scale_value(self, value: int, dimension: str = "width") -> int:
+        """
+        Scale a value from 480x320 baseline to current resolution.
+
+        Args:
+            value: Value in pixels at 480x320 resolution
+            dimension: "width" or "height" for scaling reference
+
+        Returns:
+            Scaled pixel value for current resolution
+
+        Example:
+            # 50px button width at 480px -> scales to ~13px at 128px
+            button_width = renderer.scale_value(50, "width")
+        """
+        if dimension == "width":
+            return int(value * (self.width / 480.0))
+        elif dimension == "height":
+            return int(value * (self.height / 320.0))
+        else:
+            # Use minimum scale factor for uniform scaling
+            scale = min(self.width / 480.0, self.height / 320.0)
+            return int(value * scale)
 
     def close(self) -> None:
         """Clean up renderer resources."""

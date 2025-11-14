@@ -26,45 +26,87 @@ class NowPlayingScreen(ScreenView):
         self.state = services.get("state") if services else None
         self.backend = services.get("backend") if services else None
         self.config = services.get("config") if services else None
-        self.back_button = ButtonWidget((16, 4, 80, 40), "Back", self.manager.pop)
-        self.play_button = ButtonWidget((16, 250, 96, 40), self._play_label, self._toggle_play)
-        self.slider = SliderWidget((16, 220, 200, 12))
+        # Widgets will be created dynamically in render based on resolution
+        self.back_button = None
+        self.play_button = None
+        self.slider = None
 
     def render(self, context: dict) -> None:
         image: Image.Image = context["image"]
         draw: ImageDraw.ImageDraw = context["draw"]
         fonts = context["fonts"]
-        
-        draw.rectangle((0, 0, image.width, image.height), fill=(12, 16, 24))
+        w, h = image.width, image.height
+        scale = context["scale"]
+
+        # Clear background
+        draw.rectangle((0, 0, w, h), fill=(12, 16, 24))
+
+        # Calculate scaled dimensions
+        margin = max(4, int(16 * scale))
+        small_margin = max(2, int(4 * scale))
+        button_h = max(16, int(40 * scale))
+        back_w = max(30, int(80 * scale))
+        play_w = max(40, int(96 * scale))
+        slider_h = max(8, int(12 * scale))
+
+        # Layout calculations (percentage-based for flexibility)
+        info_y = max(24, int(60 * scale))
+        artwork_y = info_y + max(16, int(20 * scale))
+        artwork_size = min(int(w * 0.6), int(h * 0.4), max(60, int(120 * scale)))
+        title_y = artwork_y + artwork_size + max(4, int(8 * scale))
+        slider_y = title_y + max(12, int(20 * scale))
+        button_y = slider_y + slider_h + max(8, int(12 * scale))
+
+        # Create widgets dynamically based on resolution
+        self.back_button = ButtonWidget((margin, small_margin, back_w, button_h), "Back", self.manager.pop)
+        self.play_button = ButtonWidget((margin, button_y, play_w, button_h), self._play_label, self._toggle_play)
+        self.slider = SliderWidget((margin, slider_y, int(w * 0.7), slider_h))
+
+        # Draw status banner
         app = self.services.get("app") if self.services else None
         if app:
             status = app.get_status()
             if status:
-                draw_status_banner(draw, status[0], image.width, fonts, status[1])
+                draw_status_banner(draw, status[0], w, fonts, status[1])
+
+        # Draw back button
         self.back_button.draw(draw, fonts["small"])
 
         if not self.state:
-            draw.text((16, 60), "State not available", font=fonts["medium"], fill=(255, 0, 0))
+            draw.text((margin, info_y), "State not available", font=fonts["medium"], fill=(255, 0, 0))
             return
 
         track = self.state.get_now_playing_track() or self.state.get_selected_track()
         playing = self.state.playback.playing
         volume = self.state.playback.volume
         self.slider.value = volume
-        
+
         number = track.number if track else 0
         title = track.title if track else "No Track Selected"
         artwork = track.artwork if track else None
 
-        draw_play_indicator(draw, playing, (16, 60), fonts["medium"])
-        draw_track_number(draw, number, (60, 62), fonts["medium"])
+        # Draw playback info
+        draw_play_indicator(draw, playing, (margin, info_y), fonts["medium"])
+        track_num_x = margin + max(20, int(44 * scale))
+        draw_track_number(draw, number, (track_num_x, info_y + max(1, int(2 * scale))), fonts["medium"])
+
+        # Draw artwork or placeholder
         if artwork:
-            draw_artwork_panel(image, draw, artwork, (16, 80, 200, 120))
+            draw_artwork_panel(image, draw, artwork, (margin, artwork_y, artwork_size, artwork_size))
         else:
-            draw.rectangle((16, 80, 216, 200), outline=(80, 80, 90), width=2)
-            draw.text((24, 140), "No artwork", font=fonts["small"], fill=(200, 200, 210))
-        draw_title_line(draw, title, (16, 200), fonts["small"], max_chars=30)
-        
+            draw.rectangle(
+                (margin, artwork_y, margin + artwork_size, artwork_y + artwork_size),
+                outline=(80, 80, 90),
+                width=max(1, int(2 * scale))
+            )
+            no_art_y = artwork_y + artwork_size // 2 - max(4, int(8 * scale))
+            draw.text((margin + max(4, int(8 * scale)), no_art_y), "No artwork", font=fonts["small"], fill=(200, 200, 210))
+
+        # Draw title with appropriate character limit based on width
+        max_chars = max(10, int(w / (8 * scale)))  # Rough estimate
+        draw_title_line(draw, title, (margin, title_y), fonts["small"], max_chars=max_chars)
+
+        # Draw controls
         self.play_button.draw(draw, fonts["small"])
         self.slider.draw(draw, fonts["small"])
 

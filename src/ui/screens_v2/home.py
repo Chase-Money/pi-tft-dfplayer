@@ -20,23 +20,59 @@ class HomeScreen(ScreenView):
         self.buttons: List[ButtonWidget] = []
 
     def on_enter(self, **kwargs):
-        self.buttons = [
-            ButtonWidget((16, 64, 200, 60), "Browse Tracks", lambda: self.manager.push("track_browser")),
-            ButtonWidget((16, 142, 200, 60), "Now Playing", lambda: self.manager.push("now_playing")),
-            ButtonWidget((16, 220, 200, 60), "Settings", lambda: self.manager.push("settings")),
-        ]
+        """Initialize screen - buttons will be created in render based on resolution."""
+        self.buttons = []
 
     def render(self, context: dict) -> None:
         image: Image.Image = context["image"]
         draw: ImageDraw.ImageDraw = context["draw"]
         font_large: ImageFont.ImageFont = context["fonts"].get("medium")
-        draw.rectangle((0, 0, image.width, image.height), fill=(12, 16, 24))
+        w, h = image.width, image.height
+        scale = context["scale"]
+
+        # Clear background
+        draw.rectangle((0, 0, w, h), fill=(12, 16, 24))
+
+        # Calculate scaled dimensions
+        margin = max(4, int(16 * scale))
+        title_y = max(4, int(12 * scale))
+        button_height = max(20, int(60 * scale))
+        button_width = int(w * 0.85)  # 85% of screen width
+        button_spacing = max(8, int(18 * scale))
+
+        # Starting Y position for buttons (below title)
+        start_y = title_y + int(40 * scale)
+
+        # Create buttons dynamically based on resolution
+        self.buttons = [
+            ButtonWidget(
+                (margin, start_y, button_width, button_height),
+                "Browse Tracks",
+                lambda: self.manager.push("track_browser")
+            ),
+            ButtonWidget(
+                (margin, start_y + button_height + button_spacing, button_width, button_height),
+                "Now Playing",
+                lambda: self.manager.push("now_playing")
+            ),
+            ButtonWidget(
+                (margin, start_y + 2 * (button_height + button_spacing), button_width, button_height),
+                "Settings",
+                lambda: self.manager.push("settings")
+            ),
+        ]
+
+        # Draw status banner if present
         app = self._app()
         if app:
             status = app.get_status()
             if status:
-                draw_status_banner(draw, status[0], image.width, context["fonts"], status[1])
-        draw.text((16, 12), "DFPlayer", font=font_large, fill=(235, 235, 235))
+                draw_status_banner(draw, status[0], w, context["fonts"], status[1])
+
+        # Draw title
+        draw.text((margin, title_y), "DFPlayer", font=font_large, fill=(235, 235, 235))
+
+        # Draw buttons
         for button in self.buttons:
             button.draw(draw, font_large)
 

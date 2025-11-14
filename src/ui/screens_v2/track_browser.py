@@ -18,8 +18,9 @@ class TrackBrowserScreen(ScreenView):
         self.state = services.get("state") if services else None
         self.backend = services.get("backend") if services else None
         self.list_widget = ListWidget([], visible_rows=4)
-        self.back_button = ButtonWidget((16, 4, 80, 40), "Back", self.manager.pop)
-        self.list_rect = (16, 60, 224, 200)
+        # Widgets will be created dynamically in render based on resolution
+        self.back_button = None
+        self.list_rect = (0, 0, 0, 0)  # Will be calculated in render
         self._scrolling = False
         self._last_drag_delta = 0.0
 
@@ -35,24 +36,52 @@ class TrackBrowserScreen(ScreenView):
         image: Image.Image = context["image"]
         draw: ImageDraw.ImageDraw = context["draw"]
         fonts = context["fonts"]
-        draw.rectangle((0, 0, image.width, image.height), fill=(12, 16, 24))
+        w, h = image.width, image.height
+        scale = context["scale"]
+
+        # Clear background
+        draw.rectangle((0, 0, w, h), fill=(12, 16, 24))
+
+        # Calculate scaled dimensions
+        margin = max(4, int(16 * scale))
+        small_margin = max(2, int(4 * scale))
+        button_h = max(16, int(40 * scale))
+        back_w = max(30, int(80 * scale))
+        title_y = max(4, int(12 * scale))
+        list_y = max(24, int(60 * scale))
+
+        # Create widgets dynamically
+        self.back_button = ButtonWidget((margin, small_margin, back_w, button_h), "Back", self.manager.pop)
+
+        # Draw status banner
         app = self.services.get("app") if self.services else None
         if app:
             status = app.get_status()
             if status:
-                draw_status_banner(draw, status[0], image.width, fonts, status[1])
-        draw.text((110, 12), "Tracks", font=fonts["medium"], fill=(235, 235, 235))
+                draw_status_banner(draw, status[0], w, fonts, status[1])
+
+        # Draw title centered (or offset for smaller screens)
+        title_x = max(margin, int(w * 0.3))
+        draw.text((title_x, title_y), "Tracks", font=fonts["medium"], fill=(235, 235, 235))
+
+        # Draw back button
         self.back_button.draw(draw, fonts["small"])
 
-        self.list_rect = (16, 60, image.width - 32, image.height - 80)
+        # Calculate list area (use most of remaining space)
+        list_bottom_margin = max(8, int(20 * scale))
+        self.list_rect = (margin, list_y, w - 2 * margin, h - list_y - list_bottom_margin)
+
+        # Calculate visible rows based on list height and row height
         visible_rows = max(1, self.list_rect[3] // self.list_widget.row_height)
         self.list_widget.set_visible_rows(visible_rows)
 
+        # Update list state
         if self.state:
             self.list_widget.selected_index = self.state.playback.selected_track_index
             max_scroll = max(0, len(self.state.tracks) - visible_rows)
             self.list_widget.scroll = min(max(self.state.playback.track_scroll_pos, 0), max_scroll)
-        
+
+        # Draw list
         self.list_widget.draw(draw, self.list_rect, fonts["small"])
 
     def handle_event(self, event: UIEvent) -> bool:
