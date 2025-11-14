@@ -7,3 +7,10 @@ SYSTEM.md
 
 .gemini/
 gha-creds-*.json
+
+# Agent-specific collaboration notes (not meant for version control)
+AGENTS.md
+CLAUDE*.md
+GEMINI*.md
+codex_review*.md
+*.agent.md

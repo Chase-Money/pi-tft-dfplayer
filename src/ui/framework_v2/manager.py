@@ -12,8 +12,9 @@ class ScreenView:
 
     name = "screen"
 
-    def __init__(self, manager: "ScreenManagerV2") -> None:
+    def __init__(self, manager: "ScreenManagerV2", services: Optional[dict] = None) -> None:
         self.manager = manager
+        self.services = services or {}
 
     # lifecycle hooks -------------------------------------------------
     def on_enter(self, **kwargs) -> None:  # pragma: no cover - optional override
@@ -34,9 +35,10 @@ class ScreenView:
 class ScreenManagerV2:
     """Stack-based screen manager with simple navigation helpers."""
 
-    def __init__(self) -> None:
+    def __init__(self, services: Optional[dict] = None) -> None:
         self._registry: Dict[str, Type[ScreenView]] = {}
         self._stack: List[ScreenView] = []
+        self.services = services or {}
 
     # Registration ---------------------------------------------------
     def register(self, name: str, screen_cls: Type[ScreenView]) -> None:
@@ -85,7 +87,6 @@ class ScreenManagerV2:
         screen_cls = self._registry.get(name)
         if not screen_cls:
             raise KeyError(f"Screen '{name}' not registered")
-        screen = screen_cls(self)
+        screen = screen_cls(self, self.services)
         screen.name = name
         return screen
-

@@ -131,7 +131,7 @@ class DisplayST7735:
         will be converted to RGB and resized to 128×128. Otherwise, the object
         is passed through to the device as-is.
         """
-        if PIL_AVAILABLE and Image is not None and hasattr(img_like, "size"):
+        if PIL_AVAILABLE and Image is not None and isinstance(img_like, Image.Image):
             img = img_like
             if getattr(img, "mode", None) != "RGB":  # type: ignore
                 img = img.convert("RGB")  # type: ignore
@@ -190,4 +190,3 @@ def _lerp(start: int, end: int, steps: int):
     delta = (end - start) / float(steps)
     for i in range(steps):
         yield int(round(start + delta * i))
-

@@ -4,6 +4,8 @@ Implements the PlaybackBackend interface for DFPlayer Mini MP3 module.
 """
 
 import logging
+import queue
+import threading
 from typing import Optional, Dict, Any
 
 from backends.base import PlaybackBackend
@@ -38,6 +40,9 @@ class DFPlayerBackend(PlaybackBackend):
         self.current_track: Optional[int] = None
         self.volume_level = 18
         self.playing = False
+        self._event_queue = queue.Queue()
+        self._listener_thread: Optional[threading.Thread] = None
+        self._listener_running = False
 
     def initialize(self) -> bool:
         """Initialize DFPlayer hardware.
@@ -55,6 +60,8 @@ class DFPlayerBackend(PlaybackBackend):
             # Set initial volume
             self.device.set_volume(self.volume_level)
 
+            self._start_listener()
+
             logger.info("DFPlayer backend initialized successfully")
             return True
 
@@ -64,6 +71,7 @@ class DFPlayerBackend(PlaybackBackend):
 
     def shutdown(self):
         """Shutdown DFPlayer backend."""
+        self._stop_listener()
         if self.device:
             try:
                 self.device.stop()
@@ -148,6 +156,41 @@ class DFPlayerBackend(PlaybackBackend):
         if self.device and self.device.is_connected:
             self.device.set_volume(volume)
             logger.debug(f"DFPlayer: volume set to {volume}")
+
+    def poll_event(self, timeout: Optional[float] = None) -> Optional[Dict[str, Any]]:
+        try:
+            return self._event_queue.get(timeout=timeout)
+        except queue.Empty:
+            return None
+
+    # Listener -------------------------------------------------------
+    def _start_listener(self) -> None:
+        if self._listener_thread and self._listener_thread.is_alive():
+            return
+        self._listener_running = True
+        self._listener_thread = threading.Thread(target=self._listener_loop, daemon=True)
+        self._listener_thread.start()
+
+    def _stop_listener(self) -> None:
+        self._listener_running = False
+        if self._listener_thread and self._listener_thread.is_alive():
+            self._listener_thread.join(timeout=0.5)
+        self._listener_thread = None
+
+    def _listener_loop(self) -> None:
+        logger.debug("DFPlayer backend listener started")
+        while self._listener_running and self.device and self.device.is_connected:
+            response = self.device.read_response(timeout=0.1)
+            if not response:
+                continue
+            cmd = response[3]
+            if cmd == 0x3D:
+                self._event_queue.put({"type": "track_finished"})
+            elif cmd == 0x3E:
+                track_num = (response[5] << 8) | response[6]
+                self._event_queue.put({"type": "track_started", "track": track_num})
+            elif cmd == 0x40:
+                self._event_queue.put({"type": "error", "code": response[6]})
 
     def get_status(self) -> Dict[str, Any]:
         """Get current playback status.

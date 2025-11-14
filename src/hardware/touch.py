@@ -5,6 +5,7 @@ Touch input handling for the DFPlayer GUI.
 import os
 import statistics
 import time
+from typing import Optional
 
 try:
     from evdev import InputDevice, ecodes, list_devices
@@ -19,6 +20,10 @@ class TouchInput:
     def __init__(self, device_path=None):
         self.device = self._find_device(device_path)
         self.min_x, self.max_x, self.min_y, self.max_y = self._get_abs_info()
+        self.screen_width = 480
+        self.screen_height = 320
+        self.orientation = dict(SWAP_XY=False, FLIP_X=False, FLIP_Y=False)
+        self.calibration = None
 
     def _find_device(self, device_path):
         """Find the touch device."""
@@ -45,15 +50,45 @@ class TouchInput:
                 return ax.min, ax.max, ay.min, ay.max
         return 0, 4095, 0, 4095
 
-    def scale_xy(self, x, y, screen_width, screen_height, orientation, calibration):
-        """Scale raw touch coordinates to screen coordinates."""
-        min_x, max_x, min_y, max_y = calibration if calibration else (self.min_x, self.max_x, self.min_y, self.max_y)
+    def fileno(self):
+        return self.device.fileno() if self.device else -1
 
-        if orientation["SWAP_XY"]:
+    def read_event(self):
+        if not self.device:
+            return None
+        try:
+            return self.device.read()
+        except BlockingIOError:
+            return None
+
+    def scale_xy(
+        self,
+        x,
+        y,
+        screen_width: Optional[int] = None,
+        screen_height: Optional[int] = None,
+        orientation: Optional[dict] = None,
+        calibration: Optional[tuple] = None,
+    ):
+        """Scale raw touch coordinates to screen coordinates.
+
+        Args are optional to preserve the previous API. When not supplied, the
+        values recorded on the TouchInput instance are used.
+        """
+        screen_width = screen_width or self.screen_width
+        screen_height = screen_height or self.screen_height
+        orientation = orientation or self.orientation
+        cal = calibration or self.calibration
+        if cal:
+            min_x, max_x, min_y, max_y = cal
+        else:
+            min_x, max_x, min_y, max_y = self.min_x, self.max_x, self.min_y, self.max_y
+
+        if orientation.get("SWAP_XY"):
             x, y = y, x
-        if orientation["FLIP_X"]:
+        if orientation.get("FLIP_X"):
             x = max_x - (x - min_x)
-        if orientation["FLIP_Y"]:
+        if orientation.get("FLIP_Y"):
             y = max_y - (y - min_y)
 
         if max_x == min_x: max_x = min_x + 1

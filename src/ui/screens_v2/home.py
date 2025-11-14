@@ -14,8 +14,8 @@ from ..framework_v2.events import UIEvent
 class HomeScreen(ScreenView):
     name = "home"
 
-    def __init__(self, manager):
-        super().__init__(manager)
+    def __init__(self, manager, services=None):
+        super().__init__(manager, services)
         self.buttons: List[ButtonWidget] = []
 
     def on_enter(self, **kwargs):
@@ -38,4 +38,3 @@ class HomeScreen(ScreenView):
             if button.handle_event(event):
                 return True
         return False
-

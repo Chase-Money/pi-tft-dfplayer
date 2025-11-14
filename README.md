@@ -86,12 +86,22 @@ This repo now ships v2 launchers for two hardware profiles that run independentl
   - Manual: `python3 src/main_touch_v2.py`
   - Service: `sudo cp systemd/dfplayer-fb-v2.service /etc/systemd/system/ && sudo systemctl enable --now dfplayer-fb-v2`
   - Setup/troubleshooting: see `docs/touch_v2_setup.md`
+  - Experimental screen-manager UI (Phase 2): set `DFPLAYER_UI_FRAMEWORK=1` before running `python3 src/main.py` to launch the new Home/Browser/Now Playing stack built on `ui/framework_v2`
 
 - 1.44" Buttons Variant (ST7735 + GPIO buttons/joystick)
   - Install deps + enable SPI: `./scripts/install_st7735_buttons_v2.sh` then reboot
   - Manual (off-device dev with emulator): `DFPLAYER_USE_EMULATOR=1 DFPLAYER_HW_PROFILE=st7735_buttons python3 src/main_v2.py`
   - Service (on-device): `sudo cp systemd/dfplayer-144lcd.service /etc/systemd/system/ && sudo systemctl enable --now dfplayer-144lcd`
   - Setup/troubleshooting: see `docs/st7735_setup.md`
+
+## How to Proceed on Your Device (Phase 2 Pilot)
+
+1. **Pick the right launcher**
+   - Touchscreen: `sudo -E python3 src/main_touch_v2.py`
+   - Button HAT: `DFPLAYER_HW_PROFILE=st7735_buttons python3 src/main_v2.py` (add `DFPLAYER_USE_EMULATOR=1` on desktops).
+2. **Preview the new screen manager** by exporting `DFPLAYER_UI_FRAMEWORK=1` before running `python3 src/main.py`. This now boots the full `src/app_v2.Application` stack (AppState + ScreenManagerV2 + DFPlayer backend) instead of the ad-hoc adapter embedded in `main.py`.
+3. **Exercise the Application/AppState stack** via `python3 src/main_v3.py`. This boots `src/app_v2.Application`, initializes the shared AppState + ScreenManagerV2, and is the entrypoint we will promote once the migration branch is merged.
+4. **Capture validation details** in `docs/smoke_test_checklist_v2.md` (hardware used, commands run, observations) so the next developer can resume testing exactly where you stopped.
 
 Profile selection
 
@@ -168,8 +178,22 @@ The `v2` architecture provides a solid foundation for future development. As new
 *   **Simplify the Main Loop:** The `run` method in `dfplayer_fb_gui_v2.py` is the most complex part of the application. Future refactoring efforts should focus on simplifying this loop by further abstracting the event handling logic. For example, a dedicated `EventHandler` class could be created to process touch events and delegate them to the appropriate UI components.
 *   **Enhance UI Components:** If the UI is expected to grow in complexity, consider creating a more robust UI component system or evaluating a library like `pygame` (configured to use the framebuffer backend).
 
+### 4. Transition from `_vN` Files to Branch-Based Versioning
+
+The file-based versioning convention (keeping `*_v2.py`, `*_v3.py`, etc.) is useful while Phase 2 is still actively comparing the legacy touchscreen stack with the new Application/AppState code. Once `src/main_v3.py` and the ScreenManagerV2 UI are validated on hardware, freeze that implementation on `main` and archive older entrypoints on a `legacy/v1` branch.
+
+- Continue creating `_vN` siblings only when the legacy runtime still needs the previous file untouched (e.g., `main.py` for the existing systemd unit).
+- New features should be developed on Git branches (e.g., `feature/gesture-support`) and merged through PRs. Document each merge in `CHANGES_v2.md` so every iteration remains traceable.
+- During the cutover, tag the commit that finalizes `_vN` files and document the transition in `VERSIONING_GUIDELINES.md` so regressions can be bisected quickly.
+
 By following these recommendations, the project will be well-positioned for future growth and will remain a stable and maintainable codebase.
 
 License
 
 MIT (see LICENSE)
+- Tests (v2)
+
+- See `tests/README_v2.md` for the modular test suite covering selectors, display/input abstractions, UI helpers, the screen manager, and the touchscreen v2 launcher bootstrap.
+- Legacy tests for the monolithic `dfplayer_fb_gui.py` remain documented in `tests/README.md` and may require hardware packages (evdev) to pass on non-Pi systems.
+- Install once for local dev/tests: `pip install -e .` (uses `pyproject.toml`). After that, `python -m pytest -q tests/...` works out of the box, and GitHub Actions runs the same suite automatically on every push/PR.
+- If you prefer the classic flow, `pip install -r requirements.txt` installs the runtime deps (Pillow, pyserial, evdev) without the editable extras.

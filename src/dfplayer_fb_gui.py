@@ -198,8 +198,19 @@ def init_serial():
 
 ser = init_serial()
 
+def _dfplayer_checksum(payload):
+    total = sum(payload) & 0xFFFF
+    return (0xFFFF - total + 1) & 0xFFFF
+
+
 def send(cmd, p1=0, p2=1):
-    """Send command to DFPlayer with error handling."""
+    """Send command to DFPlayer with error handling.
+
+    Args:
+        cmd: Command byte (0-255).
+        p1: High-order payload byte (0-255) when a 16-bit parameter is needed.
+        p2: Low-order payload byte (0-255) when a 16-bit parameter is needed.
+    """
     global ser
     if ser is None:
         logger.warning("Serial port not initialized, cannot send command")
@@ -211,7 +222,7 @@ def send(cmd, p1=0, p2=1):
             return
 
         pkt = bytearray([0x7E,0xFF,0x06,cmd,0x00,p1,p2,0x00,0x00,0xEF])
-        cs = (-sum(pkt[1:7])) & 0xFFFF
+        cs = _dfplayer_checksum(pkt[1:7])
         pkt[7], pkt[8] = (cs>>8)&0xFF, cs&0xFF
         ser.write(pkt)
     except serial.SerialException as e:
@@ -231,15 +242,14 @@ def read_dfplayer_response(timeout=0.3):
     if ser is None or not ser.is_open:
         return None
 
+    original_timeout = ser.timeout
     try:
-        original_timeout = ser.timeout
         ser.timeout = timeout
         response = ser.read(10)
-        ser.timeout = original_timeout
-
+    
         if len(response) == 10 and response[0] == 0x7E and response[9] == 0xEF:
             # Validate checksum
-            cs = (-sum(response[1:7])) & 0xFFFF
+            cs = _dfplayer_checksum(response[1:7])
             cs_high, cs_low = (cs >> 8) & 0xFF, cs & 0xFF
             if response[7] == cs_high and response[8] == cs_low:
                 return response
@@ -249,6 +259,8 @@ def read_dfplayer_response(timeout=0.3):
     except Exception as e:
         logger.warning(f"Error reading DFPlayer response: {e}")
         return None
+    finally:
+        ser.timeout = original_timeout
 
 def query_dfplayer_file_count():
     """Query DFPlayer for number of files.
@@ -446,7 +458,7 @@ def load_track_catalog():
     file_count = query_dfplayer_file_count()
     if file_count and file_count > 0:
         logger.info(f"Auto-generating catalog for {file_count} tracks from DFPlayer")
-        return [dict(number=i+1, title=f"Track {i+1:04d}") for i in range(file_count)]
+        return [dict(number=i+1, title=f"Track {i+1:03d}") for i in range(file_count)]
 
     # Last resort: fallback placeholder tracks
     logger.warning(f"Could not query DFPlayer, using fallback {CATALOG_FALLBACK_COUNT}-track catalog")
@@ -795,13 +807,13 @@ def draw_ui(note=None):
     meta = current_track_meta()
     title = meta.get("title") if isinstance(meta, dict) else None
     if not title:
-        title = f"Track {current_track_number:04d}" if current_track_number else "Track"
+        title = f"Track {current_track_number:03d}" if current_track_number else "Track"
     artist = meta.get("artist") if isinstance(meta, dict) else None
     if not artist:
         artist = "Unknown Artist"
     next_y = draw_wrapped_text(d, title, FONTM, ix+12, iy+8, iw-24, fill=(235,235,235))
     draw_wrapped_text(d, artist, FONTS, ix+12, max(next_y, iy+44), iw-24, fill=(195,195,200))
-    d.text((ix+12, iy+ih-24), f"#{current_track_number:04d}" if current_track_number else "#----", font=FONTS, fill=(175,175,185))
+    d.text((ix+12, iy+ih-24), f"#{current_track_number:03d}" if current_track_number else "#----", font=FONTS, fill=(175,175,185))
 
     # top buttons (use xywh -> xyxy)
     d.rounded_rectangle(xywh(BTN_CAL), radius=6, fill=(90,90,140))

@@ -96,6 +96,10 @@ class DFPlayer:
             logger.error(f"Unexpected error initializing serial: {e}")
             self._ser = None
 
+    def _checksum(self, payload: bytes) -> int:
+        total = sum(payload) & 0xFFFF
+        return (0xFFFF - total + 1) & 0xFFFF
+
     def send(self, cmd: int, param1: int = 0, param2: int = 1) -> None:
         """Send command to DFPlayer with error handling.
 
@@ -104,15 +108,12 @@ class DFPlayer:
 
         Args:
             cmd: Command byte (0x00-0xFF)
-            param1: First parameter byte (high byte for 16-bit values, 0-255)
-            param2: Second parameter byte (low byte for 16-bit values, 0-255)
+            param1: High-order payload byte (0-255) when a 16-bit parameter is needed
+            param2: Low-order payload byte (0-255) when a 16-bit parameter is needed
 
         Raises:
             ValueError: If parameters are out of valid byte range
             RuntimeError: If serial port is not initialized or closed
-
-        Note:
-            Checksum is calculated as: -sum(bytes[1:7]) & 0xFFFF
         """
         # Validate parameters
         if not (0 <= cmd <= 0xFF):
@@ -133,7 +134,7 @@ class DFPlayer:
             pkt = bytearray([0x7E, 0xFF, 0x06, cmd, 0x00, param1, param2, 0x00, 0x00, 0xEF])
 
             # Calculate checksum
-            cs = (-sum(pkt[1:7])) & 0xFFFF
+            cs = self._checksum(pkt[1:7])
             pkt[7], pkt[8] = (cs >> 8) & 0xFF, cs & 0xFF
 
             self._ser.write(pkt)
@@ -204,6 +205,28 @@ class DFPlayer:
         volume = max(0, min(30, int(volume)))
         self.send(self.CMD_VOLUME_SET, 0, volume)
         logger.debug(f"Volume set to {volume}")
+
+    def read_response(self, timeout: float = 0.2) -> Optional[bytes]:
+        """Read a DFPlayer response packet (10 bytes) if available."""
+        if self._ser is None or not self._ser.is_open:
+            return None
+
+        original = self._ser.timeout
+        try:
+            self._ser.timeout = timeout
+            packet = self._ser.read(10)
+            if len(packet) != 10 or packet[0] != 0x7E or packet[9] != 0xEF:
+                return None
+            cs = self._checksum(packet[1:7])
+            if packet[7] != ((cs >> 8) & 0xFF) or packet[8] != (cs & 0xFF):
+                logger.debug("DFPlayer response checksum mismatch")
+                return None
+            return packet
+        except serial.SerialException as e:
+            logger.error(f"Serial read failed: {e}")
+            return None
+        finally:
+            self._ser.timeout = original
 
     def close(self):
         """Close serial connection."""

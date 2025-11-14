@@ -10,7 +10,10 @@ import logging
 import os
 import statistics
 import sys
+import select
 import time
+from typing import Optional
+
 from PIL import Image, ImageDraw, ImageFont
 
 # Hardware modules
@@ -29,6 +32,7 @@ from backends.dfplayer_backend import DFPlayerBackend
 from utils.metadata import load_metadata, ArtworkCache
 from utils.track_catalog import load_track_catalog
 from utils.calibration import run_calibration
+from ui.app_v2 import TouchscreenFrameworkApp
 
 # Setup logging
 logging.basicConfig(
@@ -58,7 +62,6 @@ class DFPlayerApp:
         # UI state
         self.artwork_cache = ArtworkCache(max_size=10)
         self.fonts = self._load_fonts()
-
         # Register cleanup
         atexit.register(self.cleanup)
 
@@ -235,13 +238,13 @@ class DFPlayerApp:
             return
 
         meta = self.state.get_track_metadata(track.number)
-        title = meta.get("title") or track.title or f"Track {track.number:04d}"
+        title = meta.get("title") or track.title or f"Track {track.number:03d}"
         artist = meta.get("artist") or "Unknown Artist"
 
         # Draw title and artist
         next_y = self._draw_wrapped_text(draw, title, self.fonts['medium'], ix + 12, iy + 8, iw - 24, (235, 235, 235))
         self._draw_wrapped_text(draw, artist, self.fonts['small'], ix + 12, max(next_y, iy + 44), iw - 24, (195, 195, 200))
-        draw.text((ix + 12, iy + ih - 24), f"#{track.number:04d}", font=self.fonts['small'], fill=(175, 175, 185))
+        draw.text((ix + 12, iy + ih - 24), f"#{track.number:03d}", font=self.fonts['small'], fill=(175, 175, 185))
 
     def _draw_cal_cfg_buttons(self, draw, w, h):
         """Draw CAL and CFG buttons."""
@@ -488,66 +491,79 @@ class DFPlayerApp:
 
         logger.info("Entering main loop")
 
-        # Initial draw
         if self.state.tracks:
             self.state.select_track_index(0)
 
         self.draw_ui()
 
-        # Touch event processing
+        if not EVDEV_AVAILABLE:
+            logger.error("evdev not available - exiting")
+            return
+
         touching = False
         drag_vol = False
         raw_bufx, raw_bufy = [], []
         touch_last = None
         last_drag = 0.0
 
+        from evdev import ecodes
+
+        fd = self.touch.fileno()
+
         try:
-            if not EVDEV_AVAILABLE:
-                logger.error("evdev not available - exiting")
-                return
+            while True:
+                self._drain_backend_events()
+                try:
+                    rlist, _, _ = select.select([fd], [], [], 0.05)
+                except (OSError, ValueError):
+                    continue
 
-            for ev in self.touch.read_events():
-                from evdev import ecodes
+                if not rlist:
+                    continue
 
-                if ev.type == ecodes.EV_KEY and ev.code == ecodes.BTN_TOUCH:
-                    touching = (ev.value == 1)
+                while True:
+                    ev = self.touch.read_event()
+                    if ev is None:
+                        break
 
-                    if touching:
-                        raw_bufx.clear()
-                        raw_bufy.clear()
-                        touch_last = None
-                        drag_vol = False
-                    else:
-                        if not drag_vol and touch_last:
-                            self.handle_touch(*touch_last)
-                        raw_bufx.clear()
-                        raw_bufy.clear()
-                        touch_last = None
+                    if ev.type == ecodes.EV_KEY and ev.code == ecodes.BTN_TOUCH:
+                        touching = (ev.value == 1)
+                        if touching:
+                            raw_bufx.clear()
+                            raw_bufy.clear()
+                            touch_last = None
+                            drag_vol = False
+                        else:
+                            if not drag_vol and touch_last:
+                                self.handle_touch(*touch_last)
+                                touch_last = None
+                            raw_bufx.clear()
+                            raw_bufy.clear()
+                    elif ev.type == ecodes.EV_ABS:
+                        if ev.code == ecodes.ABS_X:
+                            raw_bufx.append(ev.value)
+                        elif ev.code == ecodes.ABS_Y:
+                            raw_bufy.append(ev.value)
+                        else:
+                            continue
 
-                elif ev.type == ecodes.EV_ABS:
-                    if ev.code == ecodes.ABS_X:
-                        raw_bufx.append(ev.value)
-                    elif ev.code == ecodes.ABS_Y:
-                        raw_bufy.append(ev.value)
-                    else:
-                        continue
+                        if touching and len(raw_bufx) >= 4 and len(raw_bufy) >= 4:
+                            med_rx = int(statistics.median(raw_bufx[-6:]))
+                            med_ry = int(statistics.median(raw_bufy[-6:]))
+                            px, py = self.touch.scale_xy(med_rx, med_ry)
+                            touch_last = (px, py)
 
-                    if touching and len(raw_bufx) >= 4 and len(raw_bufy) >= 4:
-                        med_rx = int(statistics.median(raw_bufx[-6:]))
-                        med_ry = int(statistics.median(raw_bufy[-6:]))
-                        px, py = self.touch.scale_xy(med_rx, med_ry)
-                        touch_last = (px, py)
+                            if not drag_vol and self._inside((20, 292, 200, 20), px, py):
+                                drag_vol = True
 
-                        # Check for volume drag
-                        if not drag_vol and self._inside((20, 292, 200, 20), px, py):
-                            drag_vol = True
-
-                        if drag_vol:
-                            now = time.time()
-                            if now - last_drag > 0.02:
-                                self.update_volume_from_x(px)
-                                last_drag = now
-
+                            if drag_vol:
+                                now = time.time()
+                                if now - last_drag > 0.02:
+                                    self.update_volume_from_x(px)
+                                    last_drag = now
+                if touch_last and not touching and not drag_vol:
+                    self.handle_touch(*touch_last)
+                    touch_last = None
         except KeyboardInterrupt:
             logger.info("Interrupted by user")
 
@@ -576,9 +592,97 @@ class DFPlayerApp:
 
         logger.info("Cleanup complete")
 
+    def _drain_backend_events(self):
+        if not self.backend:
+            return
+        while True:
+            event = self.backend.poll_event(timeout=0)
+            if not event:
+                break
+            etype = event.get("type")
+            if etype == "track_finished":
+                track = self.state.advance_track(1)
+                if track:
+                    logger.info(f"Auto-advancing to {track.title}")
+                    self.backend.play_track(track.number)
+                    self.state.start_playback()
+                    self.draw_ui(f"Playing {track.title}")
+                else:
+                    logger.info("No more tracks to auto-advance")
+            elif etype == "track_started":
+                logger.info(f"DFPlayer confirmed track {event.get('track')}")
+            elif etype == "error":
+                code = event.get("code")
+                logger.error(f"DFPlayer reported error 0x{code:02x}")
+
+    def run_framework_ui(self):
+        """Run the experimental v2 screen-manager UI."""
+        if self.touch is None or not self.touch.is_open:
+            logger.error("Touch device not initialized. Cannot start v2 UI")
+            return
+
+        ui_app = TouchscreenFrameworkApp(self)
+        ui_app.render()
+
+        from evdev import ecodes
+
+        fd = self.touch.fileno()
+        touching = False
+        raw_bufx, raw_bufy = [], []
+        touch_last = None
+
+        while True:
+            self._drain_backend_events()
+            try:
+                rlist, _, _ = select.select([fd], [], [], 0.05)
+            except (OSError, ValueError):
+                continue
+
+            if not rlist:
+                continue
+
+            while True:
+                ev = self.touch.read_event()
+                if ev is None:
+                    break
+                if ev.type == ecodes.EV_KEY and ev.code == ecodes.BTN_TOUCH:
+                    touching = (ev.value == 1)
+                    if touching:
+                        raw_bufx.clear()
+                        raw_bufy.clear()
+                        touch_last = None
+                    else:
+                        if touch_last:
+                            ui_app.handle_touch(*touch_last)
+                            ui_app.render()
+                            touch_last = None
+                elif ev.type == ecodes.EV_ABS:
+                    if ev.code == ecodes.ABS_X:
+                        raw_bufx.append(ev.value)
+                    elif ev.code == ecodes.ABS_Y:
+                        raw_bufy.append(ev.value)
+
+                    if touching and len(raw_bufx) >= 4 and len(raw_bufy) >= 4:
+                        med_rx = int(statistics.median(raw_bufx[-6:]))
+                        med_ry = int(statistics.median(raw_bufy[-6:]))
+                        px, py = self.touch.scale_xy(med_rx, med_ry)
+                        touch_last = (px, py)
+
+
 
 def main():
     """Main entry point."""
+    use_framework = os.environ.get("DFPLAYER_UI_FRAMEWORK") == "1"
+    if use_framework:
+        try:
+            logger.info("DFPLAYER_UI_FRAMEWORK=1 → launching ScreenManagerV2 application")
+            from app_v2 import Application
+
+            Application().run()
+            return
+        except Exception as exc:
+            logger.error("Failed to run v2 application, falling back to legacy UI: %s", exc, exc_info=True)
+
     app = DFPlayerApp()
 
     try:

@@ -18,8 +18,8 @@ except Exception:  # pragma: no cover - allow import without PIL in non-device e
     ImageFont = None  # type: ignore
     PIL_AVAILABLE = False
 
-from src.ui.draw_utils_v2 import xywh_to_xyxy, clamp
-from src.utils.metadata import load_artwork_thumbnail
+from .draw_utils_v2 import xywh_to_xyxy, clamp
+from utils.metadata import load_artwork_thumbnail
 
 
 def draw_play_indicator(draw, playing: bool, pos: Tuple[int, int], font, color=(230, 230, 230)) -> None:
@@ -62,4 +62,3 @@ def draw_volume_bar(draw, volume: int, rect_xywh: Tuple[int, int, int, int], bg=
     draw.rectangle(xywh_to_xyxy((x, y, w, h)), fill=bg)
     fillw = int((w) * v / 30)
     draw.rectangle(xywh_to_xyxy((x, y, fillw, h)), fill=fg)
-

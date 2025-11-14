@@ -34,6 +34,7 @@ except Exception:  # pragma: no cover - fallback if v3 not available
     from core.profile_select_v2 import detect_profile, select_hardware, import_by_path  # type: ignore
 from utils.metadata import load_metadata, ArtworkCache
 from utils.track_catalog import load_track_catalog
+from backends.dfplayer_v2 import DFPlayerBackend as DFPlayerBackendV2
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -52,6 +53,7 @@ class DFPlayerAppV2:
         self.backend = None
         self.cli_hardware = cli_hardware
         self.profile = detect_profile(cli_arg=self.cli_hardware, env=os.environ, config=self.config)
+        self.variant = "unknown"
 
         atexit.register(self.cleanup)
 
@@ -73,17 +75,16 @@ class DFPlayerAppV2:
         disp_path, input_path = select_hardware(self.profile)
         DispClass = import_by_path(disp_path)
         InputClass = import_by_path(input_path)
+        self.variant = "st7735_buttons" if "display_st7735" in disp_path else "ili9486_touch"
 
         # Prefer emulator in non-Pi envs for variant display
         use_emul = os.environ.get("DFPLAYER_USE_EMULATOR") == "1"
-        display_kwargs = {"use_emulator": use_emul} if 'display_st7735' in disp_path else {}
+        display_kwargs = {"use_emulator": use_emul} if self.variant == "st7735_buttons" else {}
         self.display = DispClass(**display_kwargs)
 
         self.input = InputClass()
 
         # Backend
-        # Lazy import backend to avoid serial import at module import time
-        from backends.dfplayer_backend_v2 import DFPlayerBackendV2  # type: ignore
         self.backend = DFPlayerBackendV2()
         self.backend.initialize()
         vol = self.config.get_volume()
@@ -100,7 +101,7 @@ class DFPlayerAppV2:
             self.state.select_track_index(0)
 
         # Wire input if buttons
-        if 'button_input' in input_path:
+        if "button_input" in input_path:
             self._wire_buttons()
 
     def _wire_buttons(self) -> None:
@@ -165,7 +166,9 @@ class DFPlayerAppV2:
     # --- Rendering ---
     def draw(self):
         # Decide minimal layout
-        if self.display.__class__.__name__ == 'DisplayST7735':
+        if not self.display:
+            return
+        if self.variant == "st7735_buttons":
             self._draw_128()
         else:
             # Fallback: draw nothing here; legacy UI remains in src/main.py

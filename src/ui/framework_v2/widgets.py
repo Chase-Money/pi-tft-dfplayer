@@ -61,6 +61,23 @@ class ListWidget:
         self.visible_rows = max(1, visible_rows)
         self.selected_index = 0
         self.scroll = 0
+        self.row_height = 32
+        self._scroll_fraction = 0.0
+
+    def set_items(self, items: Sequence[str]) -> None:
+        self.items = list(items)
+        if not self.items:
+            self.selected_index = 0
+            self.scroll = 0
+            self._scroll_fraction = 0.0
+            return
+        self.selected_index = min(self.selected_index, len(self.items) - 1)
+        self.scroll = min(self.scroll, max(0, len(self.items) - self.visible_rows))
+        self._scroll_fraction = 0.0
+
+    def set_visible_rows(self, rows: int) -> None:
+        self.visible_rows = max(1, rows)
+        self.scroll = min(self.scroll, max(0, len(self.items) - self.visible_rows))
 
     def move_selection(self, delta: int) -> None:
         if not self.items:
@@ -71,9 +88,27 @@ class ListWidget:
         elif self.selected_index >= self.scroll + self.visible_rows:
             self.scroll = self.selected_index - self.visible_rows + 1
 
+    def scroll_pixels(self, delta_px: float) -> bool:
+        if not self.items:
+            return False
+        if self.row_height <= 0:
+            return False
+        self._scroll_fraction += delta_px / max(1, self.row_height)
+        step = int(self._scroll_fraction)
+        if step == 0:
+            return False
+        self._scroll_fraction -= step
+        max_scroll = max(0, len(self.items) - self.visible_rows)
+        new_scroll = clamp(self.scroll + step, 0, max_scroll)
+        if new_scroll == self.scroll:
+            return False
+        self.scroll = new_scroll
+        return True
+
     def draw(self, draw: ImageDraw.ImageDraw, rect: Rect, font) -> None:
         x, y, w, h = rect
         row_h = max(1, h // self.visible_rows)
+        self.row_height = row_h
         for row in range(self.visible_rows):
             idx = self.scroll + row
             if idx >= len(self.items):
@@ -89,6 +124,19 @@ class ListWidget:
             bbox = draw.textbbox((0, 0), label, font=font)
             tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
             draw.text((row_rect[0] + 8, row_rect[1] + (row_rect[3] - th) // 2), label[:28], font=font, fill=text_color)
+
+    def tap(self, rect: Rect, pos: Tuple[int, int]) -> Optional[int]:
+        rx, ry, rw, rh = rect
+        px, py = pos
+        if not (rx <= px <= rx + rw and ry <= py <= ry + rh):
+            return None
+        row_h = max(1, rh // self.visible_rows)
+        row = (py - ry) // row_h
+        idx = self.scroll + int(row)
+        if 0 <= idx < len(self.items):
+            self.selected_index = idx
+            return idx
+        return None
 
 
 class SliderWidget:
@@ -121,4 +169,3 @@ class SliderWidget:
         clamped = clamp(x, rx, rx + rw)
         ratio = (clamped - rx) / max(1, rw)
         return int(round(self.min_value + ratio * (self.max_value - self.min_value)))
-
