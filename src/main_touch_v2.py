@@ -26,9 +26,9 @@ def bootstrap_aliases() -> dict:
     if src_dir and src_dir not in sys.path:
         sys.path.insert(0, src_dir)
 
-    cal_proxy = _lazy_proxy('src.utils.calibration_v2')
-    cat_proxy = _lazy_proxy('src.utils.track_catalog_v2')
-    be_proxy = _lazy_proxy('src.backends.dfplayer_backend_v2')
+    cal_proxy = _lazy_proxy('src.utils.calibration')
+    cat_proxy = _lazy_proxy('src.utils.track_catalog')
+    be_proxy = _lazy_proxy('src.backends.dfplayer_v2')
 
     sys.modules['utils.calibration'] = cal_proxy
     sys.modules['utils.track_catalog'] = cat_proxy
