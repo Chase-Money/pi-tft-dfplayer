@@ -30,7 +30,9 @@ class CalibrationScreen(ScreenView):
         app = self._app()
         width = app.framebuffer.width if app and app.framebuffer else 480
         height = app.framebuffer.height if app and app.framebuffer else 320
-        offset = TARGET_OFFSETS
+        # Scale offset based on screen size (40px at 480px wide, ~11px at 128px wide)
+        scale = min(width / 480.0, height / 320.0)
+        offset = max(10, int(TARGET_OFFSETS * scale))
         self.targets = [
             (offset, offset),
             (width - offset, offset),

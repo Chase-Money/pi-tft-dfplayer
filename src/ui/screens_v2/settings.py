@@ -15,9 +15,10 @@ class SettingsScreen(ScreenView):
 
     def __init__(self, manager, services=None):
         super().__init__(manager, services)
-        self.orientation_button = ButtonWidget((16, 80, 200, 60), self._orientation_label, self._cycle_orientation)
-        self.cal_button = ButtonWidget((16, 160, 200, 60), "Calibrate Touch", self._open_calibration)
-        self.back_button = ButtonWidget((16, 4, 80, 40), "Back", self.manager.pop)
+        # Widgets created dynamically in render based on resolution
+        self.orientation_button = None
+        self.cal_button = None
+        self.back_button = None
         self._orientation_idx = 0
 
     def on_enter(self, **kwargs):
@@ -29,15 +30,41 @@ class SettingsScreen(ScreenView):
         image: Image.Image = context["image"]
         draw: ImageDraw.ImageDraw = context["draw"]
         fonts = context["fonts"]
-        draw.rectangle((0, 0, image.width, image.height), fill=(12, 16, 24))
+        w, h = image.width, image.height
+        scale = context["scale"]
+
+        # Clear background
+        draw.rectangle((0, 0, w, h), fill=(12, 16, 24))
+
+        # Calculate scaled dimensions
+        margin = max(4, int(16 * scale))
+        small_margin = max(2, int(4 * scale))
+        button_h = max(20, int(60 * scale))
+        back_w = max(30, int(80 * scale))
+        button_w = int(w * 0.75)  # 75% of screen width
+        title_y = max(16, int(50 * scale))
+        orient_y = max(32, int(80 * scale))
+        cal_y = orient_y + button_h + max(12, int(20 * scale))
+        label_offset = max(8, int(20 * scale))
+
+        # Create widgets dynamically
+        self.back_button = ButtonWidget((margin, small_margin, back_w, max(16, int(40 * scale))), "Back", self.manager.pop)
+        self.orientation_button = ButtonWidget((margin, orient_y, button_w, button_h), self._orientation_label, self._cycle_orientation)
+        self.cal_button = ButtonWidget((margin, cal_y, button_w, button_h), "Calibrate Touch", self._open_calibration)
+
+        # Draw status banner
         app = self._app()
         if app:
             status = app.get_status()
             if status:
-                draw_status_banner(draw, status[0], image.width, fonts, status[1])
-        draw.text((16, 50), "Settings", font=fonts.get("medium"), fill=(235, 235, 235))
-        draw.text((16, 120), "Touch Orientation", font=fonts.get("small"), fill=(200, 200, 200))
-        draw.text((16, 200), "Calibration", font=fonts.get("small"), fill=(200, 200, 200))
+                draw_status_banner(draw, status[0], w, fonts, status[1])
+
+        # Draw title and labels
+        draw.text((margin, title_y), "Settings", font=fonts.get("medium"), fill=(235, 235, 235))
+        draw.text((margin, orient_y - label_offset), "Touch Orientation", font=fonts.get("small"), fill=(200, 200, 200))
+        draw.text((margin, cal_y - label_offset), "Calibration", font=fonts.get("small"), fill=(200, 200, 200))
+
+        # Draw widgets
         self.back_button.draw(draw, fonts.get("small"))
         self.orientation_button.draw(draw, fonts.get("small"))
         self.cal_button.draw(draw, fonts.get("small"))
