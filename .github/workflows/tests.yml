@@ -18,14 +18,24 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           if [ -f requirements-test.txt ]; then pip install -r requirements-test.txt; fi
-          pip install pytest
+          pip install pytest pytest-cov pytest-mock pillow
           pip install -e .
-      - name: Run v2 test suite
+      - name: Run v2 test suite with coverage
         run: |
-          python -m pytest -q \
+          python -m pytest --cov=src --cov-report=term --cov-report=xml -v \
             tests/ui/test_draw_utils_v2.py \
+            tests/ui/test_screen_manager_v2.py \
+            tests/ui/test_widgets_v2.py \
+            tests/ui/test_views_v2.py \
             tests/core/test_profile_select_v3.py \
             tests/core/test_profile_select_v2.py \
+            tests/core/test_state_v2.py \
             tests/hardware/test_display_st7735.py \
             tests/hardware/test_button_input.py \
-            tests/main/test_main_touch_v2.py
+            tests/main/test_main_touch_v2.py \
+            tests/unit/
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
