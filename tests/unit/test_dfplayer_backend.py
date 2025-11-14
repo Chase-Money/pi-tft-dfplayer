@@ -107,7 +107,7 @@ class TestCommandConstruction:
         assert packet[0] == 0x7E  # Start byte
         assert packet[1] == 0xFF  # Version
         assert packet[2] == 0x06  # Length
-        assert packet[3] == 0x0F  # Play folder command
+        assert packet[3] == 0x03  # Play track command (0x03, not 0x0F)
         assert packet[9] == 0xEF  # End byte
 
         # Verify checksum
@@ -138,10 +138,15 @@ class TestCommandConstruction:
         """Test reset command packet."""
         dfplayer_backend.reset()
 
-        packet = mock_serial.write.call_args[0][0]
+        # reset() sends two commands: 0x0C (reset) and 0x09 (select TF card)
+        # Check that write was called at least twice
+        assert mock_serial.write.call_count >= 2
 
-        assert packet[0] == 0x7E
-        assert packet[3] == 0x0C  # Reset command
+        # Get the first command (reset command)
+        first_packet = mock_serial.write.call_args_list[0][0][0]
+
+        assert first_packet[0] == 0x7E
+        assert first_packet[3] == 0x0C  # Reset command
 
 
 class TestBoundaryConditions:
@@ -281,8 +286,8 @@ class TestPlaybackControl:
     """Test playback control methods."""
 
     def test_play_method(self, dfplayer_backend, mock_serial):
-        """Test play method."""
-        dfplayer_backend.play()
+        """Test resume method (play alias)."""
+        dfplayer_backend.resume()
         assert mock_serial.write.called
 
     def test_pause_method(self, dfplayer_backend, mock_serial):
@@ -299,7 +304,7 @@ class TestPlaybackControl:
 
     def test_previous_track(self, dfplayer_backend, mock_serial):
         """Test previous track method."""
-        dfplayer_backend.previous_track()
+        dfplayer_backend.prev_track()
 
         packet = mock_serial.write.call_args[0][0]
         assert packet[3] == 0x02  # Previous command

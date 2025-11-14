@@ -221,9 +221,17 @@ class TestGestureDetection:
         # Simulate quick tap: press and release at same location
         from src.hardware.touch_controller import TouchEvent
 
+        # Set screen dimensions for scaling
+        touch_controller.touch.screen_width = 480
+        touch_controller.touch.screen_height = 320
+
         # Manually set up tap scenario
-        touch_controller.last_x = 2000
-        touch_controller.last_y = 2000
+        # Raw coordinates that will scale to approximately (100, 50)
+        # Formula: raw = (screen * (max - min) / (screen_max - 1)) + min
+        # For x=100: raw ≈ 100 * 4095 / 479 ≈ 855
+        # For y=50: raw ≈ 50 * 4095 / 319 ≈ 642
+        touch_controller.last_x = 855
+        touch_controller.last_y = 642
         touch_controller.is_pressed = True
         touch_controller.press_x = 100
         touch_controller.press_y = 50
