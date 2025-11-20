@@ -163,9 +163,33 @@ class FramebufferRendererV2:
         after render() to display the frame.
         """
         try:
+            # Validate framebuffer reference
+            if self.fb is None:
+                logger.error("CRITICAL: Framebuffer reference is None!")
+                raise RuntimeError("Framebuffer not initialized")
+
+            # Validate backbuffer
+            if self.backbuffer is None:
+                logger.error("CRITICAL: Backbuffer is None!")
+                raise RuntimeError("Backbuffer not initialized")
+
+            # Log detailed state before push (only in debug mode)
+            logger.debug(f"Presenting: fb={self.fb}, bb_size={self.backbuffer.size}, fb_size=({self.fb.width},{self.fb.height})")
+
+            # Push to framebuffer
             self.fb.push(self.backbuffer)
+
+            logger.debug("Present completed successfully")
+
         except Exception as e:
-            logger.error(f"Failed to present to framebuffer: {e}")
+            # Log detailed error with stack trace
+            logger.error(f"CRITICAL: Failed to present to framebuffer: {e}", exc_info=True)
+            logger.error(f"  Framebuffer: {self.fb}")
+            logger.error(f"  Backbuffer: {self.backbuffer}")
+            logger.error(f"  Backbuffer size: {self.backbuffer.size if self.backbuffer else 'None'}")
+
+            # Re-raise to ensure caller knows about the error
+            raise
 
     def set_screen_manager(self, manager: "ScreenManagerV2") -> None:
         """

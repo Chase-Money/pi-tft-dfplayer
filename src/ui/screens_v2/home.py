@@ -18,12 +18,10 @@ class HomeScreen(ScreenView):
     def __init__(self, manager, services=None):
         super().__init__(manager, services)
         self.buttons: List[ButtonWidget] = []
-        self._last_resolution = None
 
     def on_enter(self, **kwargs):
-        """Initialize screen - widgets created on first render."""
+        """Initialize screen - buttons will be created in render based on resolution."""
         self.buttons = []
-        self._last_resolution = None
 
     def render(self, context: dict) -> None:
         image: Image.Image = context["image"]
@@ -35,34 +33,34 @@ class HomeScreen(ScreenView):
         # Clear background
         draw.rectangle((0, 0, w, h), fill=(12, 16, 24))
 
-        # Only recreate widgets if resolution changed
-        current_res = (w, h)
-        if current_res != self._last_resolution:
-            margin = max(4, int(16 * scale))
-            title_y = max(4, int(12 * scale))
-            button_height = max(20, int(60 * scale))
-            button_width = int(w * 0.85)
-            button_spacing = max(8, int(18 * scale))
-            start_y = title_y + int(40 * scale)
+        # Calculate scaled dimensions
+        margin = max(4, int(16 * scale))
+        title_y = max(4, int(12 * scale))
+        button_height = max(20, int(60 * scale))
+        button_width = int(w * 0.85)  # 85% of screen width
+        button_spacing = max(8, int(18 * scale))
 
-            self.buttons = [
-                ButtonWidget(
-                    (margin, start_y, button_width, button_height),
-                    "Browse Tracks",
-                    lambda: self.manager.push("track_browser")
-                ),
-                ButtonWidget(
-                    (margin, start_y + button_height + button_spacing, button_width, button_height),
-                    "Now Playing",
-                    lambda: self.manager.push("now_playing")
-                ),
-                ButtonWidget(
-                    (margin, start_y + 2 * (button_height + button_spacing), button_width, button_height),
-                    "Settings",
-                    lambda: self.manager.push("settings")
-                ),
-            ]
-            self._last_resolution = current_res
+        # Starting Y position for buttons (below title)
+        start_y = title_y + int(40 * scale)
+
+        # Create buttons dynamically based on resolution
+        self.buttons = [
+            ButtonWidget(
+                (margin, start_y, button_width, button_height),
+                "Browse Tracks",
+                lambda: self.manager.push("track_browser")
+            ),
+            ButtonWidget(
+                (margin, start_y + button_height + button_spacing, button_width, button_height),
+                "Now Playing",
+                lambda: self.manager.push("now_playing")
+            ),
+            ButtonWidget(
+                (margin, start_y + 2 * (button_height + button_spacing), button_width, button_height),
+                "Settings",
+                lambda: self.manager.push("settings")
+            ),
+        ]
 
         # Draw status banner if present
         app = self._app()
@@ -72,8 +70,6 @@ class HomeScreen(ScreenView):
                 draw_status_banner(draw, status[0], w, context["fonts"], status[1])
 
         # Draw title
-        margin = max(4, int(16 * scale))
-        title_y = max(4, int(12 * scale))
         draw.text((margin, title_y), "DFPlayer", font=font_large, fill=(235, 235, 235))
 
         # Draw buttons

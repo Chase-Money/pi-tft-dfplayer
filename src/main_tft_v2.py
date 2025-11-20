@@ -153,6 +153,7 @@ class DFPlayerTFTApp:
         try:
             self.framebuffer = Framebuffer(device=self.fb_device)
             logger.info(f"Framebuffer initialized: {self.framebuffer.width}x{self.framebuffer.height}")
+            logger.info(f"Framebuffer device: {self.framebuffer.device}")
             return True
         except Exception as e:
             logger.error(f"Failed to initialize framebuffer: {e}")
@@ -607,8 +608,8 @@ def main():
     parser = argparse.ArgumentParser(description="DFPlayer TFT Touch Application V2")
     parser.add_argument(
         "--fb",
-        default="/dev/fb0",
-        help="Framebuffer device (default: /dev/fb0)"
+        default="/dev/fb1",
+        help="Framebuffer device (default: /dev/fb1)"
     )
     parser.add_argument(
         "--touch",
