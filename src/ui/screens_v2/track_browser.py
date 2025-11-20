@@ -20,6 +20,7 @@ class TrackBrowserScreen(ScreenView):
         self.list_widget = ListWidget([], visible_rows=4)
         # Widgets will be created dynamically in render based on resolution
         self.back_button = None
+        self._last_resolution = None
         self.list_rect = (0, 0, 0, 0)  # Will be calculated in render
         self._scrolling = False
         self._last_drag_delta = 0.0
@@ -50,7 +51,12 @@ class TrackBrowserScreen(ScreenView):
         title_y = max(4, int(12 * scale))
         list_y = max(24, int(60 * scale))
 
-        # Create widgets dynamically
+        # Only recreate widgets if resolution changed
+        current_res = (w, h)
+        if current_res != self._last_resolution:
+            self.back_button = ButtonWidget((margin, small_margin, back_w, button_h), "Back", self.manager.pop)
+            self._last_resolution = current_res
+
         self.back_button = ButtonWidget((margin, small_margin, back_w, button_h), "Back", self.manager.pop)
 
         # Draw status banner

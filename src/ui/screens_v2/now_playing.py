@@ -30,6 +30,7 @@ class NowPlayingScreen(ScreenView):
         self.back_button = None
         self.play_button = None
         self.slider = None
+        self._last_resolution = None
 
     def render(self, context: dict) -> None:
         image: Image.Image = context["image"]
