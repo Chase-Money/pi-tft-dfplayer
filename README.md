@@ -76,17 +76,17 @@ Generate a `SYSTEM.md` snapshot at any time:
 
 > **Note:** The systemd unit assumes the repo lives at `/home/pi/pi-tft-dfplayer`. If you clone elsewhere, update `WorkingDirectory` in `systemd/dfplayer-fb.service` (or provide a drop-in) so the service can locate `src/dfplayer_fb_gui.py`.
 
-Hardware profiles (v2)
+## Hardware profiles (v2)
 
-This repo now ships v2 launchers for two hardware profiles that run independently of the legacy touchscreen service:
+This repo ships two v2 hardware profiles that run independently of the legacy touchscreen service:
 
-- Touchscreen v2 (3.5" ILI9486 + XPT2046/ADS7846)
+- **Touchscreen v2** (3.5" ILI9486 + XPT2046/ADS7846)
   - Manual: `python3 src/main_touch_v2.py`
   - Service: `sudo cp systemd/dfplayer-fb-v2.service /etc/systemd/system/ && sudo systemctl enable --now dfplayer-fb-v2`
   - Setup/troubleshooting: see `docs/touch_v2_setup.md`
   - Experimental screen-manager UI (Phase 2): set `DFPLAYER_UI_FRAMEWORK=1` before running `python3 src/main.py` to launch the new Home/Browser/Now Playing stack built on `ui/framework_v2`
 
-- 1.44" Buttons Variant (ST7735 + GPIO buttons/joystick)
+- **1.44" Buttons Variant** (ST7735 + GPIO buttons/joystick)
   - Install deps + enable SPI: `./scripts/install_st7735_buttons_v2.sh` then reboot
   - Manual (off-device dev with emulator): `DFPLAYER_USE_EMULATOR=1 DFPLAYER_HW_PROFILE=st7735_buttons python3 src/main_v2.py`
   - Service (on-device): `sudo cp systemd/dfplayer-144lcd.service /etc/systemd/system/ && sudo systemctl enable --now dfplayer-144lcd`
@@ -101,6 +101,13 @@ This repo now ships v2 launchers for two hardware profiles that run independentl
 3. **Exercise the Application/AppState stack** via `python3 src/main_v3.py`. This boots `src/app_v2.Application`, initializes the shared AppState + ScreenManagerV2, and is the entrypoint we will promote once the migration branch is merged.
 4. **Touch settings live under the new Settings screen** (Home → Settings). Orientation changes apply immediately, and the Calibration workflow saves touch bounds back into the config.
 5. **Capture validation details** in `docs/smoke_test_checklist_v2.md` (hardware used, commands run, observations) so the next developer can resume testing exactly where you stopped.
+
+### Freeing /dev/fb1 from the Desktop (TFTs)
+- If the Raspberry Pi Desktop is painting onto `/dev/fb1`, the framebuffer app won’t be visible. Use the helper script to disable the desktop on the TFT:
+  - `sudo ./scripts/disable_desktop_and_free_fb1.sh tft-only` (recommended for TFT-only)
+  - `sudo ./scripts/disable_desktop_and_free_fb1.sh hdmi` (keep desktop on HDMI, reserve fb1 for TFT)
+  - `sudo ./scripts/disable_desktop_and_free_fb1.sh restore` (re-enable desktop/lightdm and restore config backup)
+- Reboot after running the chosen command.
 
 ### Agent / CLI Scratch Notes
 - Keep long-form context or “memory” notes in `.agent-notes/` (create it locally if it doesn’t exist). That directory is ignored by git so these files stay on your machine.

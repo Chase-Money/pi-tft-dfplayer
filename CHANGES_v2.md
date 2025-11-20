@@ -157,6 +157,7 @@ Updated
   - Touch events now carry raw coordinates, configuration-driven orientation/calibration is respected, status messaging is exposed to screens, and new screens are registered with the manager.
 - `README.md`
   - Documented the Settings/Calibration flow under the Phase 2 pilot instructions.
+  - Added guidance for freeing `/dev/fb1` from the desktop via `scripts/disable_desktop_and_free_fb1.sh` (tft-only, hdmi, restore options).
 
 Validation
 - `pytest -q tests/ui/test_draw_utils_v2.py tests/ui/test_widgets_v2.py tests/ui/test_views_v2.py tests/core/test_profile_select_v3.py tests/core/test_profile_select_v2.py tests/hardware/test_display_st7735.py tests/hardware/test_button_input.py tests/main/test_main_touch_v2.py`
