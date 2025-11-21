@@ -8,10 +8,20 @@ SYSTEM.md
 .gemini/
 gha-creds-*.json
 
+# macOS files
+.DS_Store
+
+# Log files (root level only)
+/*.log
+
+# Coverage reports
+.coverage
+htmlcov/
+
 # Agent-specific collaboration notes (not meant for version control)
-AGENTS.md
-CLAUDE*.md
-GEMINI*.md
-codex_review*.md
+# Note: CLAUDE.md in root is kept for context
+docs/AGENTS.md
+docs/GEMINI*.md
+docs/codex_review*.md
 *.agent.md
 .agent-notes/

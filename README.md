@@ -113,6 +113,9 @@ This repo ships two v2 hardware profiles that run independently of the legacy to
 - Keep long-form context or “memory” notes in `.agent-notes/` (create it locally if it doesn’t exist). That directory is ignored by git so these files stay on your machine.
 - If a note graduates into actual project documentation, move it into `docs/` (or update an existing doc) and commit it like any other change. This keeps the repo history tidy while still giving agents a place for ephemeral context.
 
+## Theming (LCARS + Retro)
+- Themes live under `themes/` and can be chosen via `DFPLAYER_THEME=<name>` (omit `.json`). Shipped samples: `lcars_default`, `lcars_rpi` (tobykurien palette), `lcars_ha` (Home Assistant LCARS palette). Custom files follow the schema in `docs/LCARS_THEME_PLAN.md`.
+
 Profile selection
 
 - v2/v3 precedence: CLI flag `--hardware`, then environment variable `DFPLAYER_HW_PROFILE`, then config file key (`hardware.profile`), then auto-detect (fb/hat). Manual override always wins.
