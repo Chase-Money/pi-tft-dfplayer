@@ -99,8 +99,8 @@ class Application:
 
         try:
             self.touch.device.set_blocking(False)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Could not set touch device to non-blocking mode: {e}")
 
     def _load_fonts(self) -> Dict[str, ImageFont.ImageFont]:
         fonts = {
@@ -242,13 +242,24 @@ class Application:
         self.screen_manager.handle_event(UIEvent("drag_end", payload))
 
     def _drain_backend_events(self) -> bool:
+        """
+        Drain pending backend events with safety limit.
+
+        Returns:
+            bool: True if any event triggered a UI refresh
+        """
         if not self.backend:
             return False
         refreshed = False
-        while True:
+        max_events = 100  # Safety limit to prevent infinite loop if events flood
+        event_count = 0
+
+        while event_count < max_events:
             event = self.backend.poll_event(timeout=0)
             if not event:
                 break
+            event_count += 1
+
             etype = event.get("type")
             if etype == "track_finished":
                 track = self.state.advance_track(1)
@@ -265,6 +276,10 @@ class Application:
             elif etype == "error":
                 code = event.get("code")
                 logger.error("DFPlayer error 0x%02x", code if isinstance(code, int) else 0)
+
+        if event_count >= max_events:
+            logger.warning(f"Event drain limit reached ({max_events} events), some events may be pending")
+
         return refreshed
 
     # ------------------------------------------------------------------
@@ -282,13 +297,13 @@ class Application:
         if self.backend:
             try:
                 self.backend.shutdown()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error(f"Error shutting down backend: {e}")
         if hasattr(self.framebuffer, "close"):
             try:
                 self.framebuffer.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error(f"Error closing framebuffer: {e}")
         logger.info("Application shutdown complete")
 
 
