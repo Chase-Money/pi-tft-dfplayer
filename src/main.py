@@ -32,7 +32,7 @@ from backends.dfplayer_backend import DFPlayerBackend
 from utils.metadata import load_metadata, ArtworkCache
 from utils.track_catalog import load_track_catalog
 from utils.calibration import run_calibration
-from ui.app_v2 import TouchscreenFrameworkApp
+from ui.app_v2_legacy_bridge import TouchscreenFrameworkApp
 
 # Setup logging
 logging.basicConfig(

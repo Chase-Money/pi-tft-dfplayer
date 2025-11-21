@@ -5,6 +5,7 @@ import time
 import sys
 import os
 import statistics
+import logging
 from PIL import Image, ImageDraw, ImageFont
 
 from .core.state_v2 import AppState
@@ -13,6 +14,8 @@ from .hardware.display_st7735 import DisplayST7735
 from .hardware.button_input import ButtonInput, Button, ButtonEvent
 from .ui.framework_v2.manager import ScreenManagerV2
 from .ui.framework_v2.events import UIEvent
+
+logger = logging.getLogger(__name__)
 
 # Import the new simplified screens (we will create these next)
 # For now, let's use the old screens and see how they break
@@ -38,7 +41,7 @@ class ApplicationWaveshare:
         self.state = AppState(tracks=mock_tracks)
         self.backend = DFPlayerBackend()
         if not self.backend.initialize():
-            print("Warning: DFPlayer backend could not be initialized.")
+            logger.warning("DFPlayer backend could not be initialized.")
         
         services = {
             "state": self.state,
@@ -82,7 +85,7 @@ class ApplicationWaveshare:
             self.fonts["medium"] = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 12)
             self.fonts["small"] = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 10)
         except IOError:
-            print("Default fonts used. For better display, install DejaVu fonts.")
+            logger.warning("Default fonts used. For better display, install DejaVu fonts.")
 
     def handle_button(self, button_name: str):
         """Maps a hardware button press to a UIEvent."""
@@ -92,9 +95,13 @@ class ApplicationWaveshare:
             event = UIEvent("swipe", payload={"delta": -1 if button_name == "UP" else 1})
         elif button_name == "PRESS":
             # Map to tap for selection
-            # Note: The framework doesn't currently support tap without coordinates.
-            # This is a limitation we'll need to address. For now, we'll send a generic tap.
-            event = UIEvent("tap")
+            # TODO: The framework doesn't currently support tap events without coordinates.
+            # Button-based UIs need to send tap events with dummy coordinates (e.g., x=0, y=0)
+            # or the framework needs to support coordinate-less taps. For now, sending a
+            # generic tap which may not be fully compatible with all widgets expecting
+            # positional data. Consider adding support for centerpoint taps or making
+            # widgets handle missing coordinates gracefully.
+            event = UIEvent("tap", payload={"x": 0, "y": 0})  # Dummy coordinates
         elif button_name == "KEY1": # Use as a 'Back' button
              self.screen_manager.pop()
         
@@ -129,7 +136,7 @@ class ApplicationWaveshare:
             self.input.cleanup()
         if self.display:
             self.display.close()
-        print("Application cleaned up.")
+        logger.info("Application cleaned up.")
 
 if __name__ == "__main__":
     app = None
@@ -137,9 +144,9 @@ if __name__ == "__main__":
         app = ApplicationWaveshare()
         app.run()
     except KeyboardInterrupt:
-        print("\nExiting application.")
+        logger.info("Exiting application.")
     except Exception as e:
-        print(f"\nAn unhandled exception occurred: {e}")
+        logger.error(f"An unhandled exception occurred: {e}")
         sys.exit(1)
     finally:
         if app:

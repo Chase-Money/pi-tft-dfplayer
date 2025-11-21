@@ -37,12 +37,13 @@ class TouchController:
     (tap, drag, swipe) suitable for UI framework consumption.
     """
 
-    def __init__(self, device: Optional[str] = None):
+    def __init__(self, device: Optional[str] = None, config=None):
         """
         Initialize the touch controller.
 
         Args:
             device: Touch device path (default: auto-detect)
+            config: Config instance for loading threshold settings (optional)
         """
         try:
             self.touch = TouchInput(device_path=device)
@@ -60,10 +61,17 @@ class TouchController:
         self.last_x = 0
         self.last_y = 0
 
-        # Gesture thresholds (very relaxed for resistive touchscreen)
-        self.tap_threshold_ms = 800  # Max time for tap (very generous for slow taps)
-        self.drag_threshold_px = 80  # Min pixels for drag (very high threshold for noisy resistive touchscreen)
-        self.swipe_threshold_px = 120  # Min pixels for swipe
+        # Load gesture thresholds from config or use defaults
+        if config:
+            thresholds = config.get_touch_thresholds()
+            self.tap_threshold_ms = thresholds.get("tap_threshold_ms", 800)
+            self.drag_threshold_px = thresholds.get("drag_threshold_px", 80)
+            self.swipe_threshold_px = thresholds.get("swipe_threshold_px", 120)
+        else:
+            # Default thresholds (very relaxed for resistive touchscreen)
+            self.tap_threshold_ms = 800  # Max time for tap (very generous for slow taps)
+            self.drag_threshold_px = 80  # Min pixels for drag (very high threshold for noisy resistive touchscreen)
+            self.swipe_threshold_px = 120  # Min pixels for swipe
 
     def get_events(self, timeout: float = 0.0) -> List[TouchEvent]:
         """

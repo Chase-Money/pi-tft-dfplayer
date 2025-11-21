@@ -3,6 +3,7 @@ Touch input handling for the DFPlayer GUI.
 """
 
 import os
+import select
 import statistics
 import time
 from typing import Optional
@@ -54,10 +55,22 @@ class TouchInput:
         return self.device.fileno() if self.device else -1
 
     def read_event(self):
+        """Read a single touch event from the device.
+
+        Returns:
+            InputEvent or None: A single event object, or None if no event available.
+
+        Note:
+            Callers expect a single event object with .type and .code attributes,
+            not a list. This method returns the first event from device.read() or
+            None if no events are available.
+        """
         if not self.device:
             return None
         try:
-            return self.device.read()
+            events = self.device.read()
+            # device.read() returns a list of events, but callers expect a single event
+            return events[0] if events else None
         except BlockingIOError:
             return None
 
@@ -100,24 +113,53 @@ class TouchInput:
         return max(0, min(screen_width - 1, sx)), max(0, min(screen_height - 1, sy))
 
     def wait_for_touch(self, timeout=8.0, samples=18):
-        """Wait for a touch event and return the median coordinates."""
+        """
+        Wait for a touch event and return the median coordinates.
+
+        Uses select() to avoid blocking indefinitely. Returns None if timeout expires.
+
+        Args:
+            timeout: Maximum time to wait in seconds (default: 8.0)
+            samples: Number of coordinate samples to collect (default: 18)
+
+        Returns:
+            tuple: (x, y) median coordinates, or None if timeout
+        """
         t0 = time.time()
         touching = False
         buf_x, buf_y = [], []
-        for ev in self.device.read_loop():
-            if time.time() - t0 > timeout:
+
+        while True:
+            remaining = timeout - (time.time() - t0)
+            if remaining <= 0:
                 return None
-            if ev.type == ecodes.EV_KEY and ev.code == ecodes.BTN_TOUCH:
-                touching = (ev.value == 1)
-                if not touching:
-                    buf_x.clear()
-                    buf_y.clear()
-            elif ev.type == ecodes.EV_ABS:
-                if touching:
-                    if ev.code == ecodes.ABS_X:
-                        buf_x.append(ev.value)
-                    elif ev.code == ecodes.ABS_Y:
-                        buf_y.append(ev.value)
-                    if len(buf_x) >= samples and len(buf_y) >= samples:
-                        return int(statistics.median(buf_x)), int(statistics.median(buf_y))
-        return None
+
+            # Use select() to check for available data with timeout
+            try:
+                ready, _, _ = select.select([self.device], [], [], min(remaining, 0.1))
+                if not ready:
+                    continue  # Timeout on select, check overall timeout and retry
+            except Exception:
+                return None
+
+            # Read available events
+            try:
+                events = self.device.read()
+            except BlockingIOError:
+                continue
+
+            # Process events
+            for ev in events:
+                if ev.type == ecodes.EV_KEY and ev.code == ecodes.BTN_TOUCH:
+                    touching = (ev.value == 1)
+                    if not touching:
+                        buf_x.clear()
+                        buf_y.clear()
+                elif ev.type == ecodes.EV_ABS:
+                    if touching:
+                        if ev.code == ecodes.ABS_X:
+                            buf_x.append(ev.value)
+                        elif ev.code == ecodes.ABS_Y:
+                            buf_y.append(ev.value)
+                        if len(buf_x) >= samples and len(buf_y) >= samples:
+                            return int(statistics.median(buf_x)), int(statistics.median(buf_y))

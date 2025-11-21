@@ -44,6 +44,11 @@ class Config:
             "flip_x": False,
             "flip_y": False
         },
+        "touch_thresholds": {
+            "tap_threshold_ms": 800,  # Max time for tap (ms)
+            "drag_threshold_px": 80,  # Min pixels for drag
+            "swipe_threshold_px": 120  # Min pixels for swipe
+        },
         "ui_theme": "default",
         "screen_brightness": 100,
         "auto_play": False
@@ -215,6 +220,26 @@ class Config:
             self._data = self.DEFAULT_VALUES.copy()
             logger.info("Configuration reset to defaults")
 
+    @staticmethod
+    def _deep_merge(base: Dict, override: Dict) -> Dict:
+        """
+        Recursively merge override into base.
+
+        Args:
+            base: Base dictionary
+            override: Override dictionary
+
+        Returns:
+            Merged dictionary
+        """
+        merged = base.copy()
+        for key, value in override.items():
+            if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+                merged[key] = Config._deep_merge(merged[key], value)
+            else:
+                merged[key] = value
+        return merged
+
     def _merge_with_defaults(self, loaded_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Merge loaded data with defaults.
@@ -226,18 +251,7 @@ class Config:
             Merged configuration
         """
         result = self.DEFAULT_VALUES.copy()
-
-        def deep_merge(base: Dict, override: Dict) -> Dict:
-            """Recursively merge override into base."""
-            merged = base.copy()
-            for key, value in override.items():
-                if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
-                    merged[key] = deep_merge(merged[key], value)
-                else:
-                    merged[key] = value
-            return merged
-
-        return deep_merge(result, loaded_data)
+        return self._deep_merge(result, loaded_data)
 
     def _backup_corrupted_config(self) -> None:
         """Create backup of corrupted config file."""
@@ -282,6 +296,23 @@ class Config:
             "swap_xy": swap_xy,
             "flip_x": flip_x,
             "flip_y": flip_y
+        })
+
+    def get_touch_thresholds(self) -> Dict[str, int]:
+        """Get touch gesture threshold parameters."""
+        return self.get("touch_thresholds", self.DEFAULT_VALUES["touch_thresholds"])
+
+    def set_touch_thresholds(
+        self,
+        tap_threshold_ms: int = 800,
+        drag_threshold_px: int = 80,
+        swipe_threshold_px: int = 120
+    ) -> None:
+        """Set touch gesture threshold parameters."""
+        self.set("touch_thresholds", {
+            "tap_threshold_ms": max(0, tap_threshold_ms),
+            "drag_threshold_px": max(0, drag_threshold_px),
+            "swipe_threshold_px": max(0, swipe_threshold_px)
         })
 
     def get_last_track(self) -> int:

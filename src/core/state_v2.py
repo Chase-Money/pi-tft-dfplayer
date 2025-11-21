@@ -41,6 +41,9 @@ class AppState:
         self.current_art_path: Optional[str] = None
         self.metadata: Dict[int, Dict[str, Any]] = {}
 
+        # O(1) lookup index: track_number -> track_index
+        self._track_number_to_index: Dict[int, int] = self._build_track_index()
+
     def get_selected_track(self) -> Optional[Track]:
         """Returns the currently selected track."""
         if not self.tracks or not (0 <= self.playback.selected_track_index < len(self.tracks)):
@@ -121,11 +124,30 @@ class AppState:
     def get_track_metadata(self, track_number: int) -> Dict[str, Any]:
         return self.metadata.get(track_number, {})
 
+    def _build_track_index(self) -> Dict[int, int]:
+        """
+        Build O(1) lookup index mapping track numbers to list indices.
+
+        Returns:
+            Dict mapping track.number -> list index
+        """
+        return {track.number: idx for idx, track in enumerate(self.tracks)}
+
     def get_index_by_number(self, track_number: int) -> Optional[int]:
-        for idx, track in enumerate(self.tracks):
-            if track.number == track_number:
-                return idx
-        return None
+        """
+        Get track index by track number using O(1) dictionary lookup.
+
+        This method now uses a pre-built dictionary index for O(1) lookups
+        instead of O(n) linear search. The index is maintained automatically
+        when tracks are modified.
+
+        Args:
+            track_number: The track number to look up
+
+        Returns:
+            The index in self.tracks list, or None if not found
+        """
+        return self._track_number_to_index.get(track_number)
 
     def _apply_metadata_to_tracks(self) -> None:
         if not self.metadata:

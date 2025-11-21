@@ -1,4 +1,10 @@
-"""Touchscreen UI framework runner for the legacy 480x320 display."""
+"""
+Legacy bridge for Touchscreen UI framework (DEPRECATED).
+
+This file bridges the legacy DFPlayerApp with the v2 screen manager.
+It is kept for backward compatibility with src/main.py but should not
+be used in new code. Use src/app_v2.py or src/main_tft_v2.py instead.
+"""
 
 from __future__ import annotations
 
@@ -7,8 +13,11 @@ from typing import Dict, Optional
 
 from PIL import Image, ImageDraw
 
-from ui.framework_v2 import ScreenManagerV2, UIEvent
-from ui.screens_v2 import HomeScreen, TrackBrowserScreen, NowPlayingScreen
+from src.ui.framework_v2.manager import ScreenManagerV2
+from src.ui.framework_v2.events import UIEvent
+from src.ui.screens_v2.home import HomeScreen
+from src.ui.screens_v2.track_browser import TrackBrowserScreen
+from src.ui.screens_v2.now_playing import NowPlayingScreen
 
 
 class TouchscreenFrameworkApp:

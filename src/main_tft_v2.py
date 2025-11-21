@@ -162,7 +162,7 @@ class DFPlayerTFTApp:
     def _init_touch(self) -> bool:
         """Initialize the touch controller."""
         try:
-            self.touch = TouchController(device=self.touch_device)
+            self.touch = TouchController(device=self.touch_device, config=self.config)
             logger.info("Touch controller initialized")
             self._apply_touch_settings()
             return True

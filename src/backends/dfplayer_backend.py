@@ -8,8 +8,8 @@ import queue
 import threading
 from typing import Optional, Dict, Any
 
-from backends.base import PlaybackBackend
-from hardware.dfplayer import DFPlayer
+from src.backends.base import PlaybackBackend
+from src.hardware.dfplayer import DFPlayer
 
 logger = logging.getLogger(__name__)
 
