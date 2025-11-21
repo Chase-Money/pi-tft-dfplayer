@@ -70,8 +70,11 @@ class CalibrationScreen(ScreenView):
 
     # ------------------------------------------------------------------
     def handle_event(self, event: UIEvent) -> bool:
-        if self.back_button.handle_event(event):
-            return True
+        # Disable back button during calibration to prevent accidental exits
+        # Only enable it after calibration is complete
+        if self.stage >= len(self.targets):
+            if self.back_button.handle_event(event):
+                return True
 
         if event.type != "tap":
             return False

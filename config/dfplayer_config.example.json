@@ -1,0 +1,23 @@
+{
+  "touch": {
+    "orientation_index": 2,
+    "calibration": [580, 3640, 3680, 260]
+  },
+  "audio": {
+    "volume": 18,
+    "last_backend": "dfplayer"
+  },
+  "ui": {
+    "theme": "default",
+    "brightness": 100
+  },
+  "paths": {
+    "metadata": "/boot/dfplayer_metadata.json",
+    "track_catalog": null,
+    "artwork_root": null
+  },
+  "system": {
+    "auto_start": true,
+    "log_level": "INFO"
+  }
+}

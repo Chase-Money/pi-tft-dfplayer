@@ -60,10 +60,10 @@ class TouchController:
         self.last_x = 0
         self.last_y = 0
 
-        # Gesture thresholds
-        self.tap_threshold_ms = 300  # Max time for tap
-        self.drag_threshold_px = 10  # Min pixels for drag
-        self.swipe_threshold_px = 50  # Min pixels for swipe
+        # Gesture thresholds (very relaxed for resistive touchscreen)
+        self.tap_threshold_ms = 800  # Max time for tap (very generous for slow taps)
+        self.drag_threshold_px = 80  # Min pixels for drag (very high threshold for noisy resistive touchscreen)
+        self.swipe_threshold_px = 120  # Min pixels for swipe
 
     def get_events(self, timeout: float = 0.0) -> List[TouchEvent]:
         """
@@ -76,6 +76,7 @@ class TouchController:
             List of TouchEvent objects
         """
         if not self.available or not self.touch:
+            logger.debug("[TOUCHCTRL] get_events: not available or no touch device")
             return []
 
         events = []
@@ -85,6 +86,7 @@ class TouchController:
             ready, _, _ = select.select([self.touch], [], [], timeout)
             if not ready:
                 return []
+            logger.debug("[TOUCHCTRL] select() found data ready")
         except Exception as e:
             logger.error(f"Error in select: {e}")
             return []
@@ -92,13 +94,16 @@ class TouchController:
         # Read all available events
         try:
             event_batch = self.touch.read_event()
+            logger.debug(f"[TOUCHCTRL] read_event() returned: {event_batch}")
             if event_batch:
                 for evt in event_batch:
+                    logger.debug(f"[TOUCHCTRL] Processing raw event: type={evt.type}, code={evt.code}, value={evt.value}")
                     touch_evt = self._process_raw_event(evt)
                     if touch_evt:
+                        logger.info(f"[TOUCHCTRL] Created touch event: {touch_evt.type} at ({touch_evt.x}, {touch_evt.y})")
                         events.append(touch_evt)
         except Exception as e:
-            logger.error(f"Error reading touch events: {e}")
+            logger.error(f"Error reading touch events: {e}", exc_info=True)
 
         return events
 
@@ -138,6 +143,8 @@ class TouchController:
         """Handle touch press event."""
         # Scale coordinates
         sx, sy = self.touch.scale_xy(self.last_x, self.last_y)
+
+        logger.info(f"[TOUCHCTRL] Press: raw=({self.last_x}, {self.last_y}) → scaled=({sx}, {sy})")
 
         self.is_pressed = True
         self.press_x = sx

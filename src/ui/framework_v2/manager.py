@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Dict, List, Optional, Type
 
 from .events import UIEvent
+
+logger = logging.getLogger(__name__)
 
 
 class ScreenView:
@@ -74,7 +77,12 @@ class ScreenManagerV2:
     def handle_event(self, event: UIEvent) -> bool:
         screen = self.current
         if screen:
-            return screen.handle_event(event)
+            logger.info(f"[MANAGER] Routing event {event.type} to screen: {screen.name}")
+            result = screen.handle_event(event)
+            logger.info(f"[MANAGER] Screen {screen.name} returned: {result}")
+            return result
+        else:
+            logger.warning(f"[MANAGER] No current screen to handle event {event.type}")
         return False
 
     def render(self, context: dict) -> None:

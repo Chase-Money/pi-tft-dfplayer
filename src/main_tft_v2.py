@@ -52,7 +52,7 @@ class DFPlayerTFTApp:
 
     def __init__(
         self,
-        fb_device: str = "/dev/fb0",
+        fb_device: str = "/dev/fb1",
         touch_device: Optional[str] = None
     ):
         """
@@ -385,10 +385,20 @@ class DFPlayerTFTApp:
         logger.info("Entering main loop")
 
         frame_count = 0
+        diag_count = 0
         last_fps_time = time.time()
 
         try:
             while self.running:
+                # Periodic diagnostic logging (every 25 frames ~5 seconds at 5 FPS)
+                if diag_count % 25 == 0:
+                    current_screen = self.screen_manager.current.name if self.screen_manager.current else "None"
+                    logger.info(f"[DIAG] Current screen: {current_screen}")
+                    logger.info(f"[DIAG] Screen stack: {self.screen_manager.stack()}")
+                    logger.info(f"[DIAG] Touch available: {self.touch is not None and getattr(self.touch, 'available', False)}")
+
+                diag_count += 1
+
                 # Process touch events
                 if self.touch:
                     self._process_touch_events()
@@ -427,11 +437,23 @@ class DFPlayerTFTApp:
         try:
             events = self.touch.get_events(timeout=0)  # Non-blocking
 
-            for event in events:
+            # Log when events are received
+            if events:
+                logger.info(f"[TOUCH] Received {len(events)} touch events from controller")
+
+            for i, event in enumerate(events):
+                # Log raw event details
+                logger.debug(f"[TOUCH] Raw event {i}: {event.__dict__ if hasattr(event, '__dict__') else event}")
+                logger.info(f"[TOUCH] Processing event {i}: type={getattr(event, 'type', 'UNKNOWN')}, "
+                           f"x={getattr(event, 'x', '?')}, y={getattr(event, 'y', '?')}")
+
                 # Convert touch event to UIEvent
                 ui_event = self._touch_to_ui_event(event)
                 if ui_event:
+                    logger.info(f"[TOUCH] Created UIEvent: {ui_event.type}, routing to screen manager")
                     self.screen_manager.handle_event(ui_event)
+                else:
+                    logger.warning(f"[TOUCH] Failed to convert touch event to UIEvent")
 
         except Exception as e:
             logger.error(f"Error processing touch events: {e}")
@@ -448,35 +470,51 @@ class DFPlayerTFTApp:
         """
         # Map touch event types to UI events
         event_type = getattr(touch_event, 'type', None)
-        raw_payload = {"raw": (touch_event.raw_x, touch_event.raw_y)} if touch_event.raw_x is not None else {}
+        x = getattr(touch_event, 'x', None)
+        y = getattr(touch_event, 'y', None)
+        raw_x = getattr(touch_event, 'raw_x', None)
+        raw_y = getattr(touch_event, 'raw_y', None)
+
+        logger.debug(f"[CONVERT] Touch event type={event_type}, coords=({x}, {y}), raw=({raw_x}, {raw_y})")
+
+        raw_payload = {"raw": (raw_x, raw_y)} if raw_x is not None else {}
 
         if event_type == 'tap':
+            logger.info(f"[CONVERT] Creating UIEvent TAP at ({x}, {y})")
             return UIEvent(
                 "tap",
                 payload={
-                    "pos": (touch_event.x, touch_event.y),
+                    "pos": (x, y),
                     **raw_payload
                 }
             )
         elif event_type == 'drag':
+            dx = getattr(touch_event, 'dx', 0)
+            dy = getattr(touch_event, 'dy', 0)
+            logger.info(f"[CONVERT] Creating UIEvent DRAG at ({x}, {y}), delta=({dx}, {dy})")
             return UIEvent(
                 "drag",
                 payload={
-                    "pos": (touch_event.x, touch_event.y),
-                    "dx": getattr(touch_event, 'dx', 0),
-                    "dy": getattr(touch_event, 'dy', 0),
+                    "pos": (x, y),
+                    "dx": dx,
+                    "dy": dy,
                     **raw_payload
                 }
             )
         elif event_type == 'swipe':
+            direction = getattr(touch_event, 'direction', 'unknown')
+            delta = getattr(touch_event, 'delta', 0)
+            logger.info(f"[CONVERT] Creating UIEvent SWIPE direction={direction}, delta={delta}")
             return UIEvent(
                 "swipe",
                 payload={
-                    "direction": touch_event.direction,
-                    "delta": getattr(touch_event, 'delta', 0),
+                    "direction": direction,
+                    "delta": delta,
                     **raw_payload
                 }
             )
+        else:
+            logger.warning(f"[CONVERT] Unrecognized event type: {event_type}")
 
         return None
 
