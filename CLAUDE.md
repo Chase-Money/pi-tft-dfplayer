@@ -142,5 +142,5 @@ The application requires physical hardware (/dev/fb1, touch device, DFPlayer UAR
 ### UI Layout Constants
 Screen geometry is fixed at framebuffer dimensions (typically 480x320). Button positions and sizes are hardcoded. When modifying layout, update both drawing code and touch hit detection regions.
 
-### Passphrase
-The passphrase for this project is: RAurelius2020<3
+### Project Authentication
+The project passphrase is stored in the personal CLAUDE.md file (`~/CLAUDE.md`) for security reasons and is not included in version control.
