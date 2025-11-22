@@ -143,6 +143,41 @@ Using the UI
 
 Calibration is saved to ~/.touch_cal.txt.
 
+## Track Catalog
+
+The app can load track titles from a text file instead of showing generic "Track 001", "Track 002" placeholders.
+
+**File format** (one track per line):
+```
+# Comments start with #
+1|Welcome Theme
+2|Level 1 Music
+3 Boss Battle     # Space-separated also works
+4|Victory Fanfare
+```
+
+**Search locations** (checked in order):
+1. `$DFPLAYER_TRACK_CATALOG` environment variable
+2. `config/track_catalog.txt` (in this repo)
+3. `/boot/dfplayer_tracks.txt`
+
+If no catalog is found, the app will:
+1. Query the DFPlayer for file count (if available)
+2. Fall back to 30 generic placeholder tracks
+
+**To create your catalog:**
+```bash
+# Copy the example file
+cp config/track_catalog.example.txt config/track_catalog.txt
+
+# Edit it with your track numbers and titles
+nano config/track_catalog.txt
+
+# Track numbers must match your DFPlayer SD card:
+#   /mp3/0001.mp3 → Track 1
+#   /mp3/0002.mp3 → Track 2
+```
+
 Repo layout
 
 src/
