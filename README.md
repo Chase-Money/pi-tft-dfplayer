@@ -114,7 +114,16 @@ This repo ships two v2 hardware profiles that run independently of the legacy to
 - If a note graduates into actual project documentation, move it into `docs/` (or update an existing doc) and commit it like any other change. This keeps the repo history tidy while still giving agents a place for ephemeral context.
 
 ## Theming (LCARS + Retro)
-- Themes live under `themes/` and can be chosen via `DFPLAYER_THEME=<name>` (omit `.json`). Shipped samples: `lcars_default`, `lcars_rpi` (tobykurien palette), `lcars_ha` (Home Assistant LCARS palette). Custom files follow the schema in `docs/LCARS_THEME_PLAN.md`.
+- Themes live under `themes/` and can be chosen via `DFPLAYER_THEME=<name>` (omit `.json`).
+- Shipped samples: `lcars_default`, `lcars_rpi` (tobykurien palette), `lcars_ha` (Home Assistant LCARS palette).
+- Custom files follow the schema in `docs/LCARS_THEME_PLAN.md`.
+- **Features**:
+  - Automatic validation with type checking and safe numeric clamping
+  - Reference parsing in `accent_cycle` (e.g., `"bg"`, `"accents[0]"`)
+  - In-memory caching to reduce file I/O
+  - Font path validation with graceful fallbacks
+  - Comprehensive test coverage (43 unit tests)
+- **Usage**: `DFPLAYER_THEME=lcars_rpi python3 src/main_touch_v2.py`
 
 Profile selection
 

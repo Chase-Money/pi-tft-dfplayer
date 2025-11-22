@@ -1,0 +1,33 @@
+{
+  "name": "LCARS Default",
+  "description": "LCARS bands with retro player cues",
+  "base_font": "Nunito",
+  "mono_font": "ShareTechMono",
+  "palette": {
+    "bg": "#0c0c10",
+    "panel": "#f5e9d7",
+    "text": "#f0f0f5",
+    "text_dim": "#5a606e",
+    "accents": ["#f2b84b", "#f47e6a", "#7e5ba6", "#3ab6c5", "#7fa3d9"],
+    "status_good": "#3ab6c5",
+    "status_warn": "#f2b84b",
+    "status_bad": "#f47e6a"
+  },
+  "metrics": {
+    "radius_lg": 24,
+    "radius_sm": 8,
+    "stroke": 2,
+    "padding": 12,
+    "gap": 8,
+    "touch_min": 44
+  },
+  "layout": {
+    "header_color": "#7fa3d9",
+    "rail_color": "#7e5ba6",
+    "button_primary": "#f2b84b",
+    "button_secondary": "#f5e9d7",
+    "progress_height": 10,
+    "volume_width": 22,
+    "accent_cycle": ["bg", "panel", "accents[0]", "accents[1]"]
+  }
+}

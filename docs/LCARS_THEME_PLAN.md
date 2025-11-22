@@ -38,10 +38,25 @@ Queue: > Track A / Track B
 - Schema fields:
   - `name`, `description`, `base_font`, `mono_font`.
   - `palette`: `bg`, `panel`, `text`, `text_dim`, `accents` (array), `status_good`, `status_warn`, `status_bad`.
-  - `metrics`: `radius_lg`, `radius_sm`, `stroke`, `padding`, `gap`, `touch_min`.
+  - `metrics`: `radius_lg`, `radius_md`, `radius_sm`, `stroke`, `padding`, `gap`, `touch_min`.
   - `layout`: optional overrides per module: `header_color`, `rail_color`, `button_primary`, `button_secondary`, `progress_height`, `volume_width`, `accent_cycle`.
 - On load: validate keys, clamp values, fall back to defaults; log warnings instead of crashing.
+- Themes are cached in memory after first load to prevent repeated file I/O.
 - Future: hot-switch themes via long-press button or settings view.
+
+### Validation & Safety Features
+- **Type validation**: All values validated against expected types (string for colors, number for metrics); invalid types trigger warnings and use defaults.
+- **Numeric clamping**: Metrics are clamped to safe ranges to prevent rendering bugs:
+  - `radius_lg`: 0-100 pixels
+  - `radius_md`: 0-50 pixels
+  - `radius_sm`: 0-25 pixels
+  - `stroke`: 0-10 pixels
+  - `padding`: 0-50 pixels
+  - `gap`: 0-50 pixels
+  - `touch_min`: 20-100 pixels (ensures usable touch targets)
+- **Reference parsing**: `layout.accent_cycle` supports palette references like `"bg"`, `"panel"`, or `"accents[0]"` for dynamic color cycling.
+- **Font validation**: Font paths checked in system locations and bundled `fonts/` directory; graceful fallback to PIL default font if unavailable.
+- **Partial themes**: Theme files need only specify overrides; missing sections merge with defaults.
 
 ### Example `themes/lcars_default.json`
 ```json
@@ -97,3 +112,15 @@ Queue: > Track A / Track B
 - `themes/lcars_default.json`: LCARS + retro player accents (baked-in default).
 - `themes/lcars_rpi.json`: Colors from tobykurien/rpi_lcars pygame demo.
 - `themes/lcars_ha.json`: Colors from th3jesta/ha-lcars Home Assistant theme.
+
+## Testing & Quality Assurance
+- **Comprehensive test suite**: `tests/ui/test_theme.py` provides 43 unit tests covering:
+  - Hex color parsing (valid, invalid, edge cases)
+  - Numeric clamping (within range, below min, above max)
+  - Reference resolution (simple keys, array indexing, invalid refs)
+  - Dictionary merging with type validation
+  - Theme loading (default, env var, caching, error handling)
+  - All Theme class methods and properties
+  - Font validation and path resolution
+- **Test coverage**: >90% code coverage for theme module
+- **CI/CD**: Tests run automatically on all commits via pytest

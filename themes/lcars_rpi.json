@@ -1,0 +1,33 @@
+{
+  "name": "LCARS RPi",
+  "description": "Palette lifted from tobykurien/rpi_lcars (pygame LCARS demo)",
+  "base_font": "Antonio",
+  "mono_font": "ShareTechMono",
+  "palette": {
+    "bg": "#000000",
+    "panel": "#ffcc99",
+    "text": "#ffffff",
+    "text_dim": "#9999cc",
+    "accents": ["#ff9900", "#9999cc", "#cc9999", "#ffcc99", "#9999ff", "#ff9966", "#cc6699"],
+    "status_good": "#33cc99",
+    "status_warn": "#ff9900",
+    "status_bad": "#cc6666"
+  },
+  "metrics": {
+    "radius_lg": 24,
+    "radius_sm": 8,
+    "stroke": 2,
+    "padding": 12,
+    "gap": 8,
+    "touch_min": 44
+  },
+  "layout": {
+    "header_color": "#9999cc",
+    "rail_color": "#cc6699",
+    "button_primary": "#ff9900",
+    "button_secondary": "#ffcc99",
+    "progress_height": 10,
+    "volume_width": 22,
+    "accent_cycle": ["accents[0]", "accents[1]", "accents[2]", "accents[3]"]
+  }
+}
