@@ -7,7 +7,7 @@ can be configured via the config system rather than being hardcoded.
 
 import pytest
 from unittest.mock import Mock, patch, MagicMock
-from src.core.config_v2 import Config
+from src.core.config import Config, get_config
 
 
 class TestTouchThresholdsConfig:
@@ -60,25 +60,22 @@ class TestTouchThresholdsConfig:
     def test_touch_controller_uses_config_thresholds(self):
         """TouchController should use thresholds from config, not hardcoded values."""
         with patch('src.hardware.touch_controller.TouchInput'):
-            with patch('src.hardware.touch_controller.Config') as MockConfig:
-                # Setup mock config
-                mock_config = Mock()
-                mock_config.get_touch_thresholds.return_value = {
-                    "tap_threshold_ms": 600,
-                    "drag_threshold_px": 20,
-                    "swipe_threshold_px": 80
-                }
-                MockConfig.return_value = mock_config
+            mock_config = Mock()
+            mock_config.get_touch_thresholds.return_value = {
+                "tap_threshold_ms": 600,
+                "drag_threshold_px": 20,
+                "swipe_threshold_px": 80
+            }
 
-                from src.hardware.touch_controller import TouchController
+            from src.hardware.touch_controller import TouchController
 
-                # Create controller - it should read from config
-                controller = TouchController(config=mock_config)
+            # Create controller - it should read from config
+            controller = TouchController(config=mock_config)
 
-                # Verify it used config values, not hardcoded ones
-                assert controller.tap_threshold_ms == 600
-                assert controller.drag_threshold_px == 20
-                assert controller.swipe_threshold_px == 80
+            # Verify it used config values, not hardcoded ones
+            assert controller.tap_threshold_ms == 600
+            assert controller.drag_threshold_px == 20
+            assert controller.swipe_threshold_px == 80
 
     def test_touch_controller_falls_back_to_defaults_if_no_config(self):
         """TouchController should use reasonable defaults if no config provided."""

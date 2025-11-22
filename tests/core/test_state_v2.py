@@ -1,4 +1,7 @@
-from src.core.state_v2 import AppState
+from src.core.state import ApplicationState, get_state
+
+# For backward compatibility with test structure, alias the new class
+AppState = ApplicationState
 
 
 def sample_tracks(count=3):

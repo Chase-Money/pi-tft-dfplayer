@@ -1,4 +1,13 @@
 """
+DEPRECATED: This module is deprecated and scheduled for removal.
+
+Use `src.core.config` instead. All functionality has been merged
+into the canonical config module.
+
+This file is kept temporarily for backward compatibility with tests.
+
+---
+
 Configuration persistence system for DFPlayer application.
 
 Provides thread-safe loading and saving of user preferences and system state
@@ -45,9 +54,9 @@ class Config:
             "flip_y": False
         },
         "touch_thresholds": {
-            "tap_threshold_ms": 800,  # Max time for tap (ms)
-            "drag_threshold_px": 80,  # Min pixels for drag
-            "swipe_threshold_px": 120  # Min pixels for swipe
+            "tap_threshold_ms": 400,  # Max time for tap (ms)
+            "drag_threshold_px": 12,  # Min pixels for drag
+            "swipe_threshold_px": 48  # Min pixels for swipe
         },
         "ui_theme": "default",
         "screen_brightness": 100,

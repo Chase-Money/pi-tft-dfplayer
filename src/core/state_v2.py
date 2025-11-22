@@ -1,4 +1,13 @@
 """
+DEPRECATED: This module is deprecated and scheduled for removal.
+
+Use `src.core.state` instead. All functionality has been merged
+into the canonical state module.
+
+This file is kept temporarily for backward compatibility with tests.
+
+---
+
 Application state management for the v2 UI framework.
 """
 from __future__ import annotations

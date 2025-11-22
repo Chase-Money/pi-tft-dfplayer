@@ -8,7 +8,10 @@ import statistics
 import logging
 from PIL import Image, ImageDraw, ImageFont
 
-from .core.state_v2 import AppState
+from .core.state import ApplicationState, get_state
+
+# For backward compatibility with existing code, alias the new class
+AppState = ApplicationState
 from .backends.dfplayer_v2 import DFPlayerBackend
 from .hardware.display_st7735 import DisplayST7735
 from .hardware.button_input import ButtonInput, Button, ButtonEvent

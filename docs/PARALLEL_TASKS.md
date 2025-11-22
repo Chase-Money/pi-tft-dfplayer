@@ -123,7 +123,7 @@ Three parallel work streams have been identified to maximize development velocit
 ### Tasks
 
 1. **Implement configuration persistence system** (BLOCKING MERGE)
-   - File: `src/core/config_v2.py` (new file)
+   - File: `src/core/config_v2.py` (DEPRECATED - now `src/core/config.py`)
    - Requirements:
      - Load/save configuration to `~/.dfplayer_config.json`
      - Settings to persist:
@@ -136,7 +136,8 @@ Three parallel work streams have been identified to maximize development velocit
      - Validation on load (handle corrupted config gracefully)
    - API Design:
      ```python
-     from src.core.config_v2 import Config
+     # Note: config_v2 is now deprecated, use config instead
+     from src.core.config import Config, get_config
 
      config = Config()
      config.load()
@@ -266,8 +267,8 @@ git pull
 
 # Can start immediately - no dependencies
 
-# Create config system
-touch src/core/config_v2.py
+# Create config system (now consolidated in src/core/config.py)
+# touch src/core/config_v2.py  # DEPRECATED
 
 # Create test infrastructure
 mkdir -p tests/unit tests/fixtures
