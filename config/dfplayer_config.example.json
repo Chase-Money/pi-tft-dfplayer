@@ -1,15 +1,22 @@
 {
   "touch": {
     "orientation_index": 2,
-    "calibration": [580, 3640, 3680, 260]
+    "calibration": [580, 3640, 3680, 260],
+    "thresholds": {
+      "tap_threshold_ms": 800,
+      "drag_threshold_px": 80,
+      "swipe_threshold_px": 120
+    }
   },
   "audio": {
     "volume": 18,
-    "last_backend": "dfplayer"
+    "last_backend": "dfplayer",
+    "last_track": 1
   },
   "ui": {
     "theme": "default",
-    "brightness": 100
+    "brightness": 100,
+    "auto_play": false
   },
   "paths": {
     "metadata": "/boot/dfplayer_metadata.json",
