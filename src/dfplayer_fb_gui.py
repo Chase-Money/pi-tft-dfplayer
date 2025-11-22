@@ -1,7 +1,15 @@
 import json
 import os, sys, time, mmap, serial, statistics, atexit, logging
+from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 from evdev import InputDevice, ecodes, list_devices
+try:
+    # The theme module lives under src/ui/theme.py; this import will succeed when run from repo root.
+    from ui.theme import load_theme, default_theme, _hex_to_rgb
+except Exception:  # fallback if module import fails
+    load_theme = None
+    default_theme = None
+    _hex_to_rgb = None
 
 # Set up logging
 logging.basicConfig(
@@ -24,6 +32,7 @@ W, H = get_fb_size(FB)
 
 METADATA_PATH = os.environ.get("DFPLAYER_METADATA", "/boot/dfplayer_metadata.json")
 ART_ROOT = os.environ.get("DFPLAYER_ART_ROOT")
+THEMES_DIR = Path(__file__).resolve().parents[1] / "themes"
 
 # 8 orientation combos we can cycle through
 ORIENTS = [
@@ -140,6 +149,49 @@ def metadata_dir():
         return METADATA_PATH
     return os.path.dirname(METADATA_PATH) or "."
 
+def _validate_artwork_path(artwork_path, base_dir):
+    """
+    Validate artwork path to prevent directory traversal attacks.
+
+    Args:
+        artwork_path: Raw artwork path from metadata
+        base_dir: Base directory for relative paths
+
+    Returns:
+        str: Validated absolute path, or None if path is unsafe
+    """
+    if not artwork_path:
+        return None
+
+    try:
+        # If absolute path, allow it (but could add whitelist in production)
+        if os.path.isabs(artwork_path):
+            return os.path.abspath(artwork_path)
+
+        # For relative paths, normalize to remove .. or . components
+        normalized = os.path.normpath(artwork_path)
+
+        # Reject if normalization introduces path traversal
+        if normalized.startswith('..') or normalized.startswith('/'):
+            print(f"WARNING: Path traversal detected in artwork path: {artwork_path}")
+            return None
+
+        # Join with base_dir and resolve to absolute path
+        full_path = os.path.join(base_dir, normalized)
+        resolved = os.path.abspath(full_path)
+
+        # Ensure resolved path is within base_dir
+        base_abs = os.path.abspath(base_dir)
+        if not resolved.startswith(base_abs + os.sep) and resolved != base_abs:
+            print(f"WARNING: Artwork path escapes base directory: {artwork_path} -> {resolved}")
+            return None
+
+        return resolved
+
+    except Exception as e:
+        print(f"ERROR: Failed to validate artwork path {artwork_path}: {e}")
+        return None
+
 def load_metadata():
     global metadata
     base_dir = metadata_dir()
@@ -168,10 +220,13 @@ def load_metadata():
         }
         art_path = info.get("artwork")
         if art_path:
-            if not os.path.isabs(art_path):
-                entry["artwork"] = os.path.join(ART_ROOT or base_dir, art_path)
+            # Use secure path validation
+            validated_path = _validate_artwork_path(art_path, ART_ROOT or base_dir)
+            if validated_path:
+                entry["artwork"] = validated_path
             else:
-                entry["artwork"] = art_path
+                # Path was rejected for security reasons
+                entry["artwork"] = None
         parsed[track_no] = entry
     metadata = parsed
 
@@ -696,6 +751,100 @@ def push(img):
     if img.size != (W,H): img = img.resize((W,H))
     mm.seek(0); mm.write(rgb888_to_rgb565le(img.convert("RGB")))
 
+# ---- Theme helpers ----
+def _fallback_hex_to_rgb(value, fallback):
+    if isinstance(value, str):
+        v = value.lstrip("#")
+        if len(v) == 6:
+            try:
+                return tuple(int(v[i:i+2], 16) for i in (0, 2, 4))
+            except Exception:
+                pass
+    if isinstance(value, (list, tuple)) and len(value) == 3:
+        try:
+            return tuple(int(x) for x in value)
+        except Exception:
+            return fallback
+    return fallback
+
+
+def _apply_theme():
+    """Load active theme (env DFPLAYER_THEME), fall back safely."""
+    if load_theme is None:
+        return None
+    name = os.environ.get("DFPLAYER_THEME")
+    try:
+        return load_theme(name, THEMES_DIR)
+    except Exception as exc:
+        logger.warning("Failed to load theme '%s': %s; using default", name, exc)
+        return default_theme() if default_theme else None
+
+
+THEME = _apply_theme()
+
+
+def theme_color(key, fallback):
+    if THEME and hasattr(THEME, "palette"):
+        val = THEME.palette.get(key)
+        parser = _hex_to_rgb or _fallback_hex_to_rgb
+        parsed = parser(val, None)
+        if parsed:
+            return parsed
+    return fallback
+
+
+def layout_color(key, fallback):
+    if THEME and hasattr(THEME, "layout"):
+        val = THEME.layout.get(key)
+        parser = _hex_to_rgb or _fallback_hex_to_rgb
+        parsed = parser(val, None)
+        if parsed:
+            return parsed
+    return fallback
+
+
+ACCENTS = THEME.accent_cycle() if THEME else []
+if not ACCENTS:
+    ACCENTS = [
+        (242, 184, 75),  # amber
+        (244, 126, 106), # coral
+        (126, 91, 166),  # plum
+        (58, 182, 197),  # teal
+        (127, 163, 217)  # steel
+    ]
+
+# Core palette with safe fallbacks to the legacy colors
+COLORS = {
+    "bg": theme_color("bg", (12, 16, 24)),
+    "panel": theme_color("panel", (26, 28, 36)),
+    "panel_mid": theme_color("panel_mid", (32, 34, 46)),
+    "panel_meta": theme_color("panel_meta", (38, 42, 60)),
+    "text": theme_color("text", (235, 235, 235)),
+    "text_dim": theme_color("text_dim", (195, 195, 200)),
+    "text_muted": theme_color("text_muted", (175, 175, 185)),
+    "status_good": theme_color("status_good", (70, 175, 120)),
+    "status_warn": theme_color("status_warn", (215, 165, 60)),
+    "status_bad": theme_color("status_bad", (195, 80, 80)),
+}
+
+LAYOUT = {
+    "radius_lg": int(THEME.metrics.get("radius_lg", 20)) if THEME else 20,
+    "radius_sm": int(THEME.metrics.get("radius_sm", 10)) if THEME else 10,
+    "stroke": int(THEME.metrics.get("stroke", 2)) if THEME else 2,
+    "padding": int(THEME.metrics.get("padding", 12)) if THEME else 12,
+    "gap": int(THEME.metrics.get("gap", 8)) if THEME else 8,
+    "touch_min": int(THEME.metrics.get("touch_min", 44)) if THEME else 44,
+    "progress_height": int(THEME.layout.get("progress_height", 10)) if THEME else 10,
+    "volume_width": int(THEME.layout.get("volume_width", 22)) if THEME else 22,
+}
+
+BUTTON_FILL_MAIN = {
+    "play": layout_color("button_primary", COLORS["status_good"]),
+    "stop": COLORS["status_bad"],
+    "prev": layout_color("button_secondary", ACCENTS[2] if len(ACCENTS) > 2 else (80, 110, 185)),
+    "next": layout_color("button_secondary", ACCENTS[3] if len(ACCENTS) > 3 else (80, 110, 185)),
+}
+
 # ---- UI ----
 try:
     FONTB = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 44)
@@ -705,10 +854,10 @@ except Exception:
     FONTB = ImageFont.load_default(); FONTM = ImageFont.load_default(); FONTS = ImageFont.load_default()
 
 BUTTONS = [
-    dict(key="play", rect=(20,  20, 200, 80), fill=(70, 175, 120), text=(255, 255, 255)),
-    dict(key="stop", rect=(20, 110, 200, 60), fill=(195, 80, 80), text=(255, 255, 255)),
-    dict(key="prev", rect=(20,  180, 94,  60), fill=(80, 110, 185), text=(255, 255, 255)),
-    dict(key="next", rect=(126, 180, 94,  60), fill=(80, 110, 185), text=(255, 255, 255)),
+    dict(key="play", rect=(20,  20, 200, 80), fill=BUTTON_FILL_MAIN["play"], text=COLORS["text"]),
+    dict(key="stop", rect=(20, 110, 200, 60), fill=BUTTON_FILL_MAIN["stop"], text=(255, 255, 255)),
+    dict(key="prev", rect=(20,  180, 94,  60), fill=BUTTON_FILL_MAIN["prev"], text=COLORS["text"]),
+    dict(key="next", rect=(126, 180, 94,  60), fill=BUTTON_FILL_MAIN["next"], text=COLORS["text"]),
 ]
 VOLBAR_RECT = (20, 260, 200, 24)
 vol = 18
@@ -767,7 +916,7 @@ def draw_ui(note=None):
         x,y,w,h = rect
         return [x, y, x+w, y+h]
 
-    img = Image.new("RGB", (W, H), (12, 16, 24))
+    img = Image.new("RGB", (W, H), COLORS["bg"])
     d = ImageDraw.Draw(img)
 
     # main buttons
@@ -780,30 +929,30 @@ def draw_ui(note=None):
             "prev": "Prev",
             "next": "Next",
         }[label_key]
-        radius = 20 if label_key in {"play", "stop"} else 16
+        radius = LAYOUT["radius_lg"] if label_key in {"play", "stop"} else LAYOUT["radius_sm"]
         d.rounded_rectangle([x, y, x + w, y + h], radius=radius, fill=button["fill"])
         font = FONTB if label_key in {"play", "stop"} else FONTM
         draw_text_center(d, x, y, w, h, label, font, color=button["text"])
 
     # volume bar
     vx, vy, vw, vh = VOLBAR_RECT
-    d.text((vx, vy - 28), "Volume", font=FONTS, fill=(215, 215, 215))
-    d.rounded_rectangle([vx, vy, vx + vw, vy + vh], radius=10, fill=(55, 60, 75))
+    d.text((vx, vy - 28), "Volume", font=FONTS, fill=COLORS["text"])
+    d.rounded_rectangle([vx, vy, vx + vw, vy + vh], radius=LAYOUT["radius_sm"], fill=COLORS["panel_mid"])
     fillw = int(vw * vol / 30)
-    d.rounded_rectangle([vx, vy, vx + fillw, vy + vh], radius=10, fill=(230, 195, 80))
-    d.text((vx + vw + 8, vy - 4), f"{vol:02d}", font=FONTM, fill=(235, 235, 235))
+    d.rounded_rectangle([vx, vy, vx + fillw, vy + vh], radius=LAYOUT["radius_sm"], fill=COLORS["status_warn"])
+    d.text((vx + vw + 8, vy - 4), f"{vol:02d}", font=FONTM, fill=COLORS["text"])
 
     # artwork region
     ax, ay, aw, ah = ART_RECT
-    d.rounded_rectangle([ax, ay, ax+aw, ay+ah], radius=18, fill=(32,34,46))
+    d.rounded_rectangle([ax, ay, ax+aw, ay+ah], radius=LAYOUT["radius_lg"], fill=COLORS["panel_mid"])
     if current_art_thumb:
         img.paste(current_art_thumb, (ax, ay))
     else:
-        d.text((ax + 24, ay + ah//2 - 10), "No artwork", font=FONTS, fill=(140,140,150))
+        d.text((ax + 24, ay + ah//2 - 10), "No artwork", font=FONTS, fill=COLORS["text_dim"])
 
     # metadata region
     ix, iy, iw, ih = INFO_RECT
-    d.rounded_rectangle([ix, iy, ix+iw, iy+ih], radius=12, fill=(38,42,60))
+    d.rounded_rectangle([ix, iy, ix+iw, iy+ih], radius=LAYOUT["radius_sm"], fill=COLORS["panel_meta"])
     meta = current_track_meta()
     title = meta.get("title") if isinstance(meta, dict) else None
     if not title:
@@ -811,24 +960,24 @@ def draw_ui(note=None):
     artist = meta.get("artist") if isinstance(meta, dict) else None
     if not artist:
         artist = "Unknown Artist"
-    next_y = draw_wrapped_text(d, title, FONTM, ix+12, iy+8, iw-24, fill=(235,235,235))
-    draw_wrapped_text(d, artist, FONTS, ix+12, max(next_y, iy+44), iw-24, fill=(195,195,200))
-    d.text((ix+12, iy+ih-24), f"#{current_track_number:03d}" if current_track_number else "#----", font=FONTS, fill=(175,175,185))
+    next_y = draw_wrapped_text(d, title, FONTM, ix+12, iy+8, iw-24, fill=COLORS["text"])
+    draw_wrapped_text(d, artist, FONTS, ix+12, max(next_y, iy+44), iw-24, fill=COLORS["text_dim"])
+    d.text((ix+12, iy+ih-24), f"#{current_track_number:03d}" if current_track_number else "#----", font=FONTS, fill=COLORS["text_muted"])
 
     # top buttons (use xywh -> xyxy)
-    d.rounded_rectangle(xywh(BTN_CAL), radius=6, fill=(90,90,140))
+    d.rounded_rectangle(xywh(BTN_CAL), radius=LAYOUT["radius_sm"], fill=ACCENTS[2 % len(ACCENTS)])
     draw_text_center(d, *BTN_CAL, "CAL", FONTS)
 
-    d.rounded_rectangle(xywh(BTN_CFG), radius=6, fill=(90,140,90))
+    d.rounded_rectangle(xywh(BTN_CFG), radius=LAYOUT["radius_sm"], fill=ACCENTS[0])
     draw_text_center(d, *BTN_CFG, "CFG", FONTS)
 
     # track list panel
     tx, ty, tw, th = TRACK_PANEL
-    d.rounded_rectangle([tx, ty, tx+tw, ty+th], radius=18, fill=(26,28,36))
-    d.text((tx + 14, ty + 10), "Tracks", font=FONTM, fill=(225,225,225))
+    d.rounded_rectangle([tx, ty, tx+tw, ty+th], radius=LAYOUT["radius_lg"], fill=COLORS["panel"])
+    d.text((tx + 14, ty + 10), "Tracks", font=FONTM, fill=COLORS["text"])
     if now_playing_idx is not None and 0 <= now_playing_idx < len(tracks):
         status = track_label(tracks[now_playing_idx])
-        d.text((tx + 14, ty + 10 + font_line_height(FONTM) + 4), f"Now playing: {status}", font=FONTS, fill=(200,200,200))
+        d.text((tx + 14, ty + 10 + font_line_height(FONTM) + 4), f"Now playing: {status}", font=FONTS, fill=COLORS["text_dim"])
     list_x, list_y, list_w, list_h = track_list_rect()
     up_rect, down_rect = track_scroll_button_rects()
     visible = ensure_track_scroll_bounds()
@@ -843,27 +992,27 @@ def draw_ui(note=None):
             row_y = list_y + i * TRACK_ROW_HEIGHT
             row_h = TRACK_ROW_HEIGHT - 6
             row_rect = (list_x, row_y, list_w, row_h)
-            fill = (45,48,60)
-            text_color = (220,220,220)
+            fill = COLORS["panel_meta"]
+            text_color = COLORS["text"]
             label = track_label(tracks[idx])
             if idx == now_playing_idx:
-                fill = (215,165,60)
-                text_color = (25,25,25)
+                fill = COLORS["status_warn"]
+                text_color = COLORS["bg"]
                 label = f"▶ {label}"
             elif idx == selected_track_idx:
-                fill = (70,90,150)
-            d.rounded_rectangle([row_rect[0], row_rect[1], row_rect[0]+row_rect[2], row_rect[1]+row_rect[3]], radius=10, fill=fill)
+                fill = ACCENTS[3 % len(ACCENTS)]
+            d.rounded_rectangle([row_rect[0], row_rect[1], row_rect[0]+row_rect[2], row_rect[1]+row_rect[3]], radius=LAYOUT["radius_sm"], fill=fill)
             draw_text_center(d, *row_rect, label, FONTS, color=text_color)
     else:
-        d.text((list_x, list_y + 6), "No tracks found", font=FONTS, fill=(210,210,210))
+        d.text((list_x, list_y + 6), "No tracks found", font=FONTS, fill=COLORS["text"])
 
     # scroll buttons
-    up_fill = (85,90,118) if track_scroll > 0 else (52,56,72)
-    down_fill = (85,90,118) if track_scroll < max_scroll else (52,56,72)
-    up_color = (235,235,235) if track_scroll > 0 else (140,140,150)
-    down_color = (235,235,235) if track_scroll < max_scroll else (140,140,150)
-    d.rounded_rectangle(xywh(up_rect), radius=10, fill=up_fill)
-    d.rounded_rectangle(xywh(down_rect), radius=10, fill=down_fill)
+    up_fill = COLORS["panel_mid"] if track_scroll > 0 else COLORS["panel"]
+    down_fill = COLORS["panel_mid"] if track_scroll < max_scroll else COLORS["panel"]
+    up_color = COLORS["text"] if track_scroll > 0 else COLORS["text_dim"]
+    down_color = COLORS["text"] if track_scroll < max_scroll else COLORS["text_dim"]
+    d.rounded_rectangle(xywh(up_rect), radius=LAYOUT["radius_sm"], fill=up_fill)
+    d.rounded_rectangle(xywh(down_rect), radius=LAYOUT["radius_sm"], fill=down_fill)
     ux, uy, uw, uh = up_rect
     dx, dy, dw, dh = down_rect
     up_arrow = [(ux + uw/2, uy + 8), (ux + uw - 10, uy + uh - 8), (ux + 10, uy + uh - 8)]
@@ -872,7 +1021,7 @@ def draw_ui(note=None):
     d.polygon(down_arrow, fill=down_color)
 
     if note:
-        d.text((6, H-22), note, font=FONTS, fill=(210,210,210))
+        d.text((6, H-22), note, font=FONTS, fill=COLORS["text"])
 
     push(img)
 
