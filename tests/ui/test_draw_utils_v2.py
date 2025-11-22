@@ -1,4 +1,4 @@
-from src.ui.draw_utils_v2 import xywh_to_xyxy, inside, clamp, iter_lines_by_width
+from src.ui.draw_utils import xywh_to_xyxy, inside, clamp, iter_lines_by_width
 
 
 def test_xywh_to_xyxy_and_inside():

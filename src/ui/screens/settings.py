@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from PIL import Image, ImageDraw
 
-from ..framework_v2.manager import ScreenView
-from ..framework_v2.widgets import ButtonWidget
-from ..framework_v2.events import UIEvent
-from ..views_v2 import draw_status_banner
+from ..framework.manager import ScreenView
+from ..framework.widgets import ButtonWidget
+from ..framework.events import UIEvent
+from ..views import draw_status_banner
 
 
 class SettingsScreen(ScreenView):

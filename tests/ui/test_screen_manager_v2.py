@@ -1,5 +1,5 @@
-from src.ui.framework_v2.manager import ScreenManagerV2, ScreenView
-from src.ui.framework_v2.events import UIEvent
+from src.ui.framework.manager import ScreenManagerV2, ScreenView
+from src.ui.framework.events import UIEvent
 
 
 class DummyScreen(ScreenView):

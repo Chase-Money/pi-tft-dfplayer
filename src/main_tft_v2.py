@@ -22,14 +22,14 @@ from core.config import get_config, ORIENTS
 from backends.dfplayer_v2 import DFPlayerBackend
 from hardware.framebuffer import Framebuffer
 from hardware.touch_controller import TouchController
-from ui.framework_v2.manager import ScreenManagerV2
-from ui.framework_v2.events import UIEvent
-from ui.renderer_v2 import FramebufferRendererV2
+from ui.framework.manager import ScreenManagerV2
+from ui.framework.events import UIEvent
+from ui.renderer import FramebufferRendererV2
 
 # Import V2 screens
-from ui.screens_v2.home import HomeScreen
-from ui.screens_v2.track_browser import TrackBrowserScreen
-from ui.screens_v2.now_playing import NowPlayingScreen
+from ui.screens.home import HomeScreen
+from ui.screens.track_browser import TrackBrowserScreen
+from ui.screens.now_playing import NowPlayingScreen
 from utils.track_catalog import load_track_catalog
 
 logging.basicConfig(
@@ -360,8 +360,8 @@ class DFPlayerTFTApp:
         self.screen_manager.register("home", HomeScreen)
         self.screen_manager.register("track_browser", TrackBrowserScreen)
         self.screen_manager.register("now_playing", NowPlayingScreen)
-        from ui.screens_v2.settings import SettingsScreen
-        from ui.screens_v2.calibration import CalibrationScreen
+        from ui.screens.settings import SettingsScreen
+        from ui.screens.calibration import CalibrationScreen
 
         self.screen_manager.register("settings", SettingsScreen)
         self.screen_manager.register("calibration", CalibrationScreen)

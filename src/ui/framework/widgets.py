@@ -8,7 +8,7 @@ from typing import Callable, List, Optional, Sequence, Tuple
 from PIL import ImageDraw
 
 from .events import UIEvent
-from ..draw_utils_v2 import xywh_to_xyxy, clamp
+from ..draw_utils import xywh_to_xyxy, clamp
 
 
 Rect = Tuple[int, int, int, int]

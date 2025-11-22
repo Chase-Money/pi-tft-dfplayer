@@ -16,11 +16,11 @@ from utils.metadata import load_metadata
 from hardware.framebuffer import Framebuffer
 from hardware.touch_controller import TouchController
 from backends.dfplayer_v2 import DFPlayerBackend
-from ui.framework_v2.manager import ScreenManagerV2
-from ui.framework_v2.events import UIEvent
-from ui.screens_v2.home import HomeScreen
-from ui.screens_v2.track_browser import TrackBrowserScreen
-from ui.screens_v2.now_playing import NowPlayingScreen
+from ui.framework.manager import ScreenManagerV2
+from ui.framework.events import UIEvent
+from ui.screens.home import HomeScreen
+from ui.screens.track_browser import TrackBrowserScreen
+from ui.screens.now_playing import NowPlayingScreen
 
 logger = logging.getLogger(__name__)
 

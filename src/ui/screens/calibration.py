@@ -7,9 +7,9 @@ from typing import List, Optional, Tuple
 
 from PIL import Image, ImageDraw
 
-from ..framework_v2.manager import ScreenView
-from ..framework_v2.widgets import ButtonWidget
-from ..framework_v2.events import UIEvent
+from ..framework.manager import ScreenView
+from ..framework.widgets import ButtonWidget
+from ..framework.events import UIEvent
 
 TARGET_OFFSETS = 40
 

@@ -18,7 +18,7 @@ except Exception:  # pragma: no cover - allow import without PIL in non-device e
     ImageFont = None  # type: ignore
     PIL_AVAILABLE = False
 
-from src.ui.draw_utils_v2 import xywh_to_xyxy, clamp
+from src.ui.draw_utils import xywh_to_xyxy, clamp
 from src.utils.metadata import load_artwork_thumbnail
 
 

@@ -10,7 +10,7 @@ from typing import Optional
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'src')))
 
 from main_tft_v2 import DFPlayerTFTApp
-from ui.framework_v2.events import UIEvent
+from ui.framework.events import UIEvent
 
 
 class TestDFPlayerTFTAppInitialization(unittest.TestCase):

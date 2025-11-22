@@ -1,6 +1,6 @@
 from PIL import Image, ImageDraw, ImageFont
 
-from ui.views_v2 import draw_volume_bar, draw_title_line
+from ui.views import draw_volume_bar, draw_title_line
 
 
 def _make_canvas(width=40, height=20):

@@ -1,7 +1,7 @@
 from PIL import Image, ImageDraw, ImageFont
 
-from src.ui.framework_v2.widgets import ButtonWidget, ListWidget, SliderWidget
-from src.ui.framework_v2.events import UIEvent
+from src.ui.framework.widgets import ButtonWidget, ListWidget, SliderWidget
+from src.ui.framework.events import UIEvent
 
 
 def make_draw():

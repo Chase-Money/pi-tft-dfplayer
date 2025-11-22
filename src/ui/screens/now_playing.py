@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from PIL import Image, ImageDraw, ImageFont
 
-from ..framework_v2.manager import ScreenView
-from ..framework_v2.widgets import ButtonWidget, SliderWidget
-from ..framework_v2.events import UIEvent
-from ..draw_utils_v2 import clamp
-from ..views_v2 import (
+from ..framework.manager import ScreenView
+from ..framework.widgets import ButtonWidget, SliderWidget
+from ..framework.events import UIEvent
+from ..draw_utils import clamp
+from ..views import (
     draw_play_indicator,
     draw_track_number,
     draw_artwork_panel,

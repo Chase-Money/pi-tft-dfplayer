@@ -46,49 +46,39 @@ def touch_input(mock_device):
 
 
 class TestTouchInputReadEvent:
-    """Tests for the read_event method - the critical bug fix."""
+    """Tests for the read_event method using batch semantics."""
 
-    def test_read_event_returns_single_event_not_list(self, touch_input, mock_device):
-        """
-        CRITICAL BUG: read_event() should return a single InputEvent object,
-        not a list. Callers expect to access .type and .code attributes directly.
-
-        Before fix: device.read() returns a list, causing AttributeError
-        After fix: Should return a single event object or None
-        """
-        # Simulate evdev returning a list of events (what device.read() actually does)
+    def test_read_event_returns_batch_of_events(self, touch_input, mock_device):
+        """read_event should return a list of events (possibly empty)."""
         mock_event = InputEvent(0, 0, ecodes.EV_ABS, ecodes.ABS_X, 2048)
         mock_device.read.return_value = [mock_event]
 
-        # Call read_event
         result = touch_input.read_event()
 
-        # ASSERTION: Result should be a single event object, not a list
-        assert result is not None, "read_event should return an event when available"
-        assert not isinstance(result, list), "read_event must NOT return a list"
-        assert hasattr(result, 'type'), "Result should have .type attribute"
-        assert hasattr(result, 'code'), "Result should have .code attribute"
-        assert result.type == ecodes.EV_ABS
-        assert result.code == ecodes.ABS_X
+        assert isinstance(result, list), "read_event should return a list"
+        assert len(result) == 1
+        assert result[0] is mock_event
 
-    def test_read_event_returns_none_when_no_events(self, touch_input, mock_device):
-        """read_event should return None when no events are available."""
+    def test_read_event_returns_empty_list_when_no_events(self, touch_input, mock_device):
+        """read_event should return an empty list when no events are available."""
         mock_device.read.return_value = []
 
         result = touch_input.read_event()
 
-        assert result is None, "read_event should return None when no events available"
+        assert isinstance(result, list)
+        assert result == []
 
-    def test_read_event_returns_none_on_blocking_io_error(self, touch_input, mock_device):
-        """read_event should return None on BlockingIOError (non-blocking read)."""
+    def test_read_event_returns_empty_list_on_blocking_io_error(self, touch_input, mock_device):
+        """read_event should return an empty list on BlockingIOError (non-blocking read)."""
         mock_device.read.side_effect = BlockingIOError()
 
         result = touch_input.read_event()
 
-        assert result is None, "read_event should return None on BlockingIOError"
+        assert isinstance(result, list)
+        assert result == []
 
-    def test_read_event_returns_none_when_device_is_none(self):
-        """read_event should return None when device is not initialized."""
+    def test_read_event_returns_empty_list_when_device_is_none(self):
+        """read_event should return an empty list when device is not initialized."""
         with patch('src.hardware.touch.list_devices', return_value=[]):
             from src.hardware.touch import TouchInput
 
@@ -99,7 +89,8 @@ class TestTouchInputReadEvent:
 
                 result = touch.read_event()
 
-                assert result is None, "read_event should return None when device is None"
+                assert isinstance(result, list)
+                assert result == []
 
 
 class TestTouchInputScaleXY:
@@ -127,13 +118,13 @@ class TestTouchInputScaleXY:
         """Test coordinate scaling with XY swap (90° rotation)."""
         touch_input.orientation = {'SWAP_XY': True, 'FLIP_X': False, 'FLIP_Y': False}
 
-        # When swapped, x and y should be exchanged
+        # When swapped, x and y axes are exchanged along with screen dimensions.
         sx1, sy1 = touch_input.scale_xy(1000, 3000)
-        sx2, sy2 = touch_input.scale_xy(3000, 1000)
+        expected_sx1 = int(3000 * (touch_input.screen_height - 1) / (touch_input.max_y - touch_input.min_y))
+        expected_sy1 = int(1000 * (touch_input.screen_width - 1) / (touch_input.max_x - touch_input.min_x))
 
-        # After swap, sx1 should be similar to sy2 and sy1 should be similar to sx2
-        assert abs(sx1 - sy2) < 10, "SWAP_XY should exchange coordinates"
-        assert abs(sy1 - sx2) < 10, "SWAP_XY should exchange coordinates"
+        assert abs(sx1 - expected_sx1) < 5, "SWAP_XY should map X to screen height"
+        assert abs(sy1 - expected_sy1) < 5, "SWAP_XY should map Y to screen width"
 
 
 class TestTouchInputDeviceDetection:

@@ -17,8 +17,8 @@ from typing import Optional, TYPE_CHECKING
 from PIL import Image, ImageDraw, ImageFont
 
 if TYPE_CHECKING:
-    from ..framework_v2.manager import ScreenManagerV2
-    from ...hardware.framebuffer import Framebuffer
+    from .framework.manager import ScreenManagerV2
+    from ..hardware.framebuffer import Framebuffer
 
 logger = logging.getLogger(__name__)
 
