@@ -1,4 +1,5 @@
-# Phase 2 Fixes & Framework Merge Summary
+# Phase 2 Fixes & Framework Merge Summary (Legacy)
+Legacy merge summary. Track new work in `docs/ai/TASK_LOG.md` and `docs/ai/PROJECT_GUIDE.md`.
 
 **Date:** 2025-11-12
 **Status:** ✅ Complete

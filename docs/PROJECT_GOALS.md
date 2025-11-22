@@ -1,4 +1,5 @@
-# Project Goals & Roadmap
+# Project Goals & Roadmap (Legacy)
+Legacy goals. Use `docs/ai/PROJECT_GUIDE.md` for current objectives and `docs/ai/TASK_LOG.md` for tracking.
 **Pi TFT DFPlayer - Touchscreen MP3 Player for Raspberry Pi**
 
 **Last Updated:** 2025-11-12

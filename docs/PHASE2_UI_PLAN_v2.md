@@ -1,4 +1,5 @@
-# Phase 2 UI Plan (v2)
+# Phase 2 UI Plan (v2) (Legacy)
+Legacy phase plan. Capture new plans in `docs/ai/PROJECT_GUIDE.md` and updates in `docs/ai/TASK_LOG.md`.
 
 This document captures the concrete plan for Phase 2 (UI Framework) as outlined in IMPLEMENTATION_ROADMAP.md and adapts it to the current modular/v2 codebase.
 

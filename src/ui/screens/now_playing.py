@@ -16,6 +16,7 @@ from ..views import (
     draw_volume_bar,
     draw_status_banner,
 )
+from ..theme_palette import get_palette
 
 
 class NowPlayingScreen(ScreenView):
@@ -39,8 +40,9 @@ class NowPlayingScreen(ScreenView):
         w, h = image.width, image.height
         scale = context["scale"]
 
+        palette = get_palette()
         # Clear background
-        draw.rectangle((0, 0, w, h), fill=(12, 16, 24))
+        draw.rectangle((0, 0, w, h), fill=palette.bg)
 
         # Calculate scaled dimensions
         margin = max(4, int(16 * scale))
@@ -74,7 +76,7 @@ class NowPlayingScreen(ScreenView):
         self.back_button.draw(draw, fonts["small"])
 
         if not self.state:
-            draw.text((margin, info_y), "State not available", font=fonts["medium"], fill=(255, 0, 0))
+            draw.text((margin, info_y), "State not available", font=fonts["medium"], fill=palette.danger)
             return
 
         track = self.state.get_now_playing_track() or self.state.get_selected_track()
@@ -97,11 +99,11 @@ class NowPlayingScreen(ScreenView):
         else:
             draw.rectangle(
                 (margin, artwork_y, margin + artwork_size, artwork_y + artwork_size),
-                outline=(80, 80, 90),
+                outline=palette.accent_alt,
                 width=max(1, int(2 * scale))
             )
             no_art_y = artwork_y + artwork_size // 2 - max(4, int(8 * scale))
-            draw.text((margin + max(4, int(8 * scale)), no_art_y), "No artwork", font=fonts["small"], fill=(200, 200, 210))
+            draw.text((margin + max(4, int(8 * scale)), no_art_y), "No artwork", font=fonts["small"], fill=palette.text_dim)
 
         # Draw title with appropriate character limit based on width
         max_chars = max(10, int(w / (8 * scale)))  # Rough estimate

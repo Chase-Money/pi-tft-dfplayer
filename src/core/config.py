@@ -142,6 +142,8 @@ class Config:
         Returns:
             Configuration value or default
         """
+        if key_path == "touch_thresholds":
+            return self.get_touch_thresholds()
         keys = key_path.split('.')
         value = self.data
 

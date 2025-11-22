@@ -1,4 +1,5 @@
-# Phase 2 Status — 2025-11-13
+# Phase 2 Status — 2025-11-13 (Legacy)
+Legacy phase status. Log new status in `docs/ai/TASK_LOG.md`; current direction in `docs/ai/PROJECT_GUIDE.md`.
 
 This checkpoint summarizes the current state of the Phase 2 migration (ScreenManagerV2 + Application/AppState) so the next developer can pick up without re-reading every file.
 

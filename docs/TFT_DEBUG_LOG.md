@@ -1,4 +1,5 @@
-# TFT_DEBUG_LOG.md
+# TFT_DEBUG_LOG.md (Legacy)
+Legacy hardware debug log. Do not add new entries here; capture future notes in `docs/ai/TASK_LOG.md` and consult `docs/ai/PROJECT_GUIDE.md`.
 
 ## Overview
 This file documents the behavior of the Raspberry Pi 3.5" SPI TFT (ILI9486 + ADS7846) during development of the DFPlayer framebuffer GUI. The TFT initializes, but the DFPlayer app cannot draw to the display.

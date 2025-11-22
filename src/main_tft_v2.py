@@ -1,13 +1,8 @@
 #!/usr/bin/env python3
 """
-Main entry point for TFT touch screen variant using V2 framework.
+Legacy entry point for TFT touch screen variant (pre-unification).
 
-This application integrates:
-- ILI9486 framebuffer (/dev/fb0 or /dev/fb1)
-- XPT2046/ADS7846 touch controller
-- DFPlayer Mini backend
-- V2 UI framework with screen manager
-- FramebufferRendererV2
+Prefer running `src/main.py` which uses app_v2 + ConfigV2 + TouchController + ScreenManagerV2.
 """
 
 import logging
@@ -232,6 +227,10 @@ class DFPlayerTFTApp:
         if self.backend:
             try:
                 file_count = self.backend.query_file_count()
+                try:
+                    file_count = int(file_count)
+                except Exception:
+                    file_count = None
                 if file_count and file_count > 0:
                     logger.info(f"DFPlayer reported {file_count} files, generating placeholder tracks")
                     return [
@@ -328,8 +327,8 @@ class DFPlayerTFTApp:
 
     def _init_state(self) -> None:
         """Initialize application state."""
-        # Load tracks from catalog file
-        tracks = load_track_catalog()
+        # Load tracks from catalog or DFPlayer fallback
+        tracks = self._load_tracks()
 
         self.state = get_state()
         self.state.set_tracks(tracks)

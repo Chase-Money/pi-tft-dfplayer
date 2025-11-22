@@ -1,4 +1,5 @@
-# Touch Input Debugging Notes
+# Touch Input Debugging Notes (Legacy)
+Legacy touch debugging log. For new investigations, record outcomes in `docs/ai/TASK_LOG.md` and align with `docs/ai/PROJECT_GUIDE.md`.
 
 **Status:** Touch controller initializes successfully but button clicks have no effect
 **Date:** 2025-11-20

@@ -1,4 +1,5 @@
-# Quick Fix Guide - Renderer Not Writing to Display
+# Quick Fix Guide - Renderer Not Writing to Display (Legacy)
+Legacy quick-fix note. For new fixes, log in `docs/ai/TASK_LOG.md` and follow `docs/ai/PROJECT_GUIDE.md`.
 
 ## TL;DR
 

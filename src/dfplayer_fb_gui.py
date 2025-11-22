@@ -12,6 +12,8 @@ except Exception:  # fallback if module import fails
     _hex_to_rgb = None
 
 # Set up logging
+# Legacy framebuffer UI (monolithic). Prefer v2 stack via `src/main.py`.
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'

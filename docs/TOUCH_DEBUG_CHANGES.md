@@ -1,4 +1,5 @@
-# Touch Input Debug Logging Implementation
+# Touch Input Debug Logging Implementation (Legacy)
+Legacy touch debug notes. Future touch logging changes should be summarized in `docs/ai/TASK_LOG.md` and follow `docs/ai/PROJECT_GUIDE.md`.
 
 ## Completion Summary
 

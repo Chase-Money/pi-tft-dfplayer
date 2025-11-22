@@ -18,6 +18,7 @@ class Track:
     title: str
     artist: Optional[str] = None
     artwork_path: Optional[str] = None
+    artwork: Optional[str] = None
 
 
 @dataclass
@@ -48,7 +49,7 @@ class ApplicationState:
         track_scroll: Current scroll position in track list
     """
 
-    def __init__(self):
+    def __init__(self, tracks: Optional[List[Any]] = None):
         """Initialize application state."""
         self.tracks: List[Track] = []
         self.playback = PlaybackState()
@@ -62,6 +63,28 @@ class ApplicationState:
 
         # O(1) lookup index: track_number -> track_index
         self._track_number_to_index: Dict[int, int] = {}
+        if tracks:
+            self.set_tracks(tracks)
+
+    def _normalize_tracks(self, tracks: List[Any]) -> List[Track]:
+        normalized: List[Track] = []
+        for t in tracks:
+            if isinstance(t, Track):
+                normalized.append(t)
+            elif isinstance(t, dict):
+                number = int(t.get("number", len(normalized) + 1))
+                title = t.get("title") or f"Track {number}"
+                art = t.get("artwork") or t.get("artwork_path")
+                normalized.append(
+                    Track(
+                        number=number,
+                        title=title,
+                        artist=t.get("artist"),
+                        artwork_path=art,
+                        artwork=art
+                    )
+                )
+        return normalized
 
     def set_tracks(self, tracks: List[Track]) -> None:
         """Set track catalog.
@@ -69,7 +92,7 @@ class ApplicationState:
         Args:
             tracks: List of Track objects
         """
-        self.tracks = tracks
+        self.tracks = self._normalize_tracks(tracks)
         logger.info(f"Track catalog updated: {len(tracks)} tracks")
 
         # Rebuild O(1) lookup index
@@ -319,6 +342,7 @@ class ApplicationState:
                 track.artist = meta["artist"]
             if meta.get("artwork"):
                 track.artwork_path = meta["artwork"]
+                track.artwork = meta["artwork"]
 
         logger.debug(f"Applied metadata to {len(self.tracks)} tracks")
 

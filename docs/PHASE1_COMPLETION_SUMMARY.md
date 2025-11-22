@@ -1,4 +1,5 @@
-# Phase 1: Code Quality Refactoring - COMPLETION SUMMARY
+# Phase 1: Code Quality Refactoring - COMPLETION SUMMARY (Legacy)
+Legacy phase summary. New status/progress should go to `docs/ai/TASK_LOG.md`; current guidance lives in `docs/ai/PROJECT_GUIDE.md`.
 
 **Branch:** `refactor/phase1-code-quality`
 **Date Completed:** 2025-11-12

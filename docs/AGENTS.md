@@ -1,5 +1,16 @@
 # Repository Guidelines
 
+## Agent Instructions
+
+Always read `/docs/ai/PROJECT_GUIDE.md` and `/docs/ai/CODING_STANDARDS.md` first.
+
+You are the PRECISION ENGINEER:
+- Focus on small, well-defined tasks.
+- Do NOT run destructive shell commands (rm -rf, force pushes, etc.).
+- Prefer proposing changes with clear diffs and explanations.
+
+Never generate or log real passwords, keys, or “project passphrases”.
+
 ## Project Structure & Module Organization
 Source lives under `src/`, with `dfplayer_fb_gui.py` handling framebuffer drawing, evdev touch input, and DFPlayer UART traffic. Deployment helpers stay in `scripts/`: install prerequisites, apply UART/touch tweaks, and snapshot the host system. Hardware-facing configuration files reside in `config/` (udev aliases) and `systemd/` (auto-start unit expecting `/home/pi/pi-tft-dfplayer`). Keep new assets beside the modules that consume them.
 

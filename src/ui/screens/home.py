@@ -11,6 +11,7 @@ from ..framework.manager import ScreenView
 from ..framework.widgets import ButtonWidget
 from ..framework.events import UIEvent
 from ..views import draw_status_banner
+from ..theme_palette import get_palette
 
 logger = logging.getLogger(__name__)
 
@@ -35,8 +36,9 @@ class HomeScreen(ScreenView):
         w, h = image.width, image.height
         scale = context["scale"]
 
+        palette = get_palette()
         # Clear background
-        draw.rectangle((0, 0, w, h), fill=(12, 16, 24))
+        draw.rectangle((0, 0, w, h), fill=palette.bg)
 
         # Calculate scaled dimensions
         margin = max(4, int(16 * scale))
@@ -77,7 +79,7 @@ class HomeScreen(ScreenView):
                 draw_status_banner(draw, status[0], w, context["fonts"], status[1])
 
         # Draw title
-        draw.text((margin, title_y), "DFPlayer", font=font_large, fill=(235, 235, 235))
+        draw.text((margin, title_y), "DFPlayer", font=font_large, fill=palette.text)
 
         # Draw buttons
         for button in self.buttons:

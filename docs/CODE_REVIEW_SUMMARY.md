@@ -1,4 +1,5 @@
-# Code Review Summary
+# Code Review Summary (Legacy)
+Legacy review summary. Capture new reviews/decisions in `docs/ai/TASK_LOG.md` and maintain current rules in `docs/ai/CODING_STANDARDS.md`.
 **Date:** November 10, 2025
 **Version Reviewed:** v0.2 (GitHub)
 **Overall Score:** 60/100 (D Grade)

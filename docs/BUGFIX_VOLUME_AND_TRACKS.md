@@ -1,4 +1,5 @@
-# Bug Fixes for dfplayer_fb_gui.py
+# Bug Fixes for dfplayer_fb_gui.py (Legacy)
+Legacy bugfix log. Record future fixes in `docs/ai/TASK_LOG.md` and align with `docs/ai/PROJECT_GUIDE.md`.
 
 ## Issue 1: Volume Slider Not Working (CRITICAL)
 

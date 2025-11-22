@@ -1,4 +1,5 @@
-# Comprehensive Review Summary
+# Comprehensive Review Summary (Legacy)
+Legacy review summary. Record new review outcomes in `docs/ai/TASK_LOG.md`; current standards live in `docs/ai/CODING_STANDARDS.md`.
 **Pi TFT DFPlayer - Complete Project Assessment**
 
 **Date:** 2025-11-12

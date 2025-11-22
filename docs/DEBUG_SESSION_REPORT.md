@@ -1,4 +1,5 @@
-# Debug and Test Session Report - Phase 1 Refactored Codebase
+# Debug and Test Session Report - Phase 1 Refactored Codebase (Legacy)
+Legacy log. Do not append new entries here; add future notes to `docs/ai/TASK_LOG.md` and follow `docs/ai/PROJECT_GUIDE.md`.
 
 **Date**: 2025-11-12
 **Session Duration**: ~2 hours

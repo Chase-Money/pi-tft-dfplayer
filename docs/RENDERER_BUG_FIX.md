@@ -1,4 +1,5 @@
-# FramebufferRendererV2 Bug Fix
+# FramebufferRendererV2 Bug Fix (Legacy)
+Legacy renderer bug log. For new renderer work, log in `docs/ai/TASK_LOG.md` and follow `docs/ai/PROJECT_GUIDE.md`.
 
 ## Problem Summary
 

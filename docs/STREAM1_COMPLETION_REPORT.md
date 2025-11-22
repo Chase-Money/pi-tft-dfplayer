@@ -1,4 +1,5 @@
-# Stream 2 (Dev A) Progress Report
+# Stream 2 (Dev A) Progress Report (Legacy)
+Legacy progress report. Track new stream progress in `docs/ai/TASK_LOG.md` and align with `docs/ai/PROJECT_GUIDE.md`.
 
 ## What was delivered
 - Calibration & Settings screens added to the v2 UI stack:

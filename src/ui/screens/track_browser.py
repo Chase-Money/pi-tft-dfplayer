@@ -8,6 +8,7 @@ from ..framework.manager import ScreenView
 from ..framework.widgets import ListWidget, ButtonWidget
 from ..framework.events import UIEvent
 from ..views import draw_status_banner
+from ..theme_palette import get_palette
 
 
 class TrackBrowserScreen(ScreenView):
@@ -39,9 +40,10 @@ class TrackBrowserScreen(ScreenView):
         fonts = context["fonts"]
         w, h = image.width, image.height
         scale = context["scale"]
+        palette = get_palette()
 
         # Clear background
-        draw.rectangle((0, 0, w, h), fill=(12, 16, 24))
+        draw.rectangle((0, 0, w, h), fill=palette.bg)
 
         # Calculate scaled dimensions
         margin = max(4, int(16 * scale))
@@ -68,7 +70,7 @@ class TrackBrowserScreen(ScreenView):
 
         # Draw title centered (or offset for smaller screens)
         title_x = max(margin, int(w * 0.3))
-        draw.text((title_x, title_y), "Tracks", font=fonts["medium"], fill=(235, 235, 235))
+        draw.text((title_x, title_y), "Tracks", font=fonts["medium"], fill=palette.text)
 
         # Draw back button
         self.back_button.draw(draw, fonts["small"])

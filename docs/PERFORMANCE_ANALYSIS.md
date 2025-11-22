@@ -1,4 +1,5 @@
-# Performance Analysis & Optimization Report
+# Performance Analysis & Optimization Report (Legacy)
+Legacy performance report. Capture new perf findings in `docs/ai/TASK_LOG.md` and keep standards in `docs/ai/CODING_STANDARDS.md`.
 
 ## Summary
 

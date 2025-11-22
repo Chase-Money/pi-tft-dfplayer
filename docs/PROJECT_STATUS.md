@@ -1,4 +1,5 @@
-# Project Status Summary
+# Project Status Summary (Legacy)
+Legacy status summary. Track new status in `docs/ai/TASK_LOG.md`; current direction in `docs/ai/PROJECT_GUIDE.md`.
 **Pi TFT DFPlayer Enhancement Project**
 
 **Date:** November 10, 2025

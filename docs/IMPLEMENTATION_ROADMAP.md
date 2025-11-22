@@ -1,4 +1,5 @@
-# Implementation Roadmap
+# Implementation Roadmap (Legacy)
+Legacy roadmap. Current direction is in `docs/ai/PROJECT_GUIDE.md`; log new milestones in `docs/ai/TASK_LOG.md`.
 ## Spotify Streaming + Bluetooth + Multi-Screen UI Expansion
 
 **Project:** pi-tft-dfplayer Enhanced Edition

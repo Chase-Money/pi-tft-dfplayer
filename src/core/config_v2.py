@@ -53,6 +53,7 @@ class Config:
             "flip_x": False,
             "flip_y": False
         },
+        "touch_orientation_index": 6,
         "touch_thresholds": {
             "tap_threshold_ms": 400,  # Max time for tap (ms)
             "drag_threshold_px": 12,  # Min pixels for drag
@@ -101,6 +102,10 @@ class Config:
 
                 # Merge with defaults (in case new keys were added)
                 self._data = self._merge_with_defaults(loaded_data)
+                # Ensure required defaults are present even if the file has empty dicts
+                for key, val in self.DEFAULT_VALUES.items():
+                    if key not in self._data or (isinstance(self._data[key], dict) and not self._data[key]):
+                        self._data[key] = val
                 self._loaded = True
                 logger.info(f"Configuration loaded from {self.config_path}")
                 return True
@@ -176,11 +181,24 @@ class Config:
             keys = key.split('.')
             value = self._data
 
+            # Special-case touch_thresholds to guarantee defaults
+            if key == "touch_thresholds":
+                val = self._data.get("touch_thresholds")
+                if not isinstance(val, dict) or not val:
+                    return self.DEFAULT_VALUES["touch_thresholds"].copy()
+                merged = self.DEFAULT_VALUES["touch_thresholds"].copy()
+                merged.update(val)
+                return merged
+
             for k in keys:
                 if isinstance(value, dict) and k in value:
                     value = value[k]
                 else:
-                    return default
+                    value = default
+                    break
+
+            if key == "touch_thresholds" and (not value or not isinstance(value, dict)):
+                return self.DEFAULT_VALUES["touch_thresholds"]
 
             return value
 
@@ -307,9 +325,24 @@ class Config:
             "flip_y": flip_y
         })
 
+    def get_touch_orientation_index(self) -> int:
+        """Get touch orientation index (legacy compatibility)."""
+        return int(self.get("touch_orientation_index", self.DEFAULT_VALUES.get("touch_orientation_index", 0)))
+
+    def set_touch_orientation_index(self, index: int) -> None:
+        """Set touch orientation index (legacy compatibility)."""
+        self.set("touch_orientation_index", int(index))
+
     def get_touch_thresholds(self) -> Dict[str, int]:
         """Get touch gesture threshold parameters."""
-        return self.get("touch_thresholds", self.DEFAULT_VALUES["touch_thresholds"])
+        thresholds = self.get("touch_thresholds", self.DEFAULT_VALUES["touch_thresholds"])
+        # Backfill missing keys or empty dicts
+        if not thresholds:
+            thresholds = self.DEFAULT_VALUES["touch_thresholds"].copy()
+        else:
+            for k, v in self.DEFAULT_VALUES["touch_thresholds"].items():
+                thresholds.setdefault(k, v)
+        return thresholds
 
     def set_touch_thresholds(
         self,

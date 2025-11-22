@@ -1,4 +1,5 @@
-# Bug Fix Summary
+# Bug Fix Summary (Legacy)
+Legacy bugfix log. Record new fixes in `docs/ai/TASK_LOG.md` and follow `docs/ai/PROJECT_GUIDE.md`.
 
 ## Critical Bug Fixes Applied to dfplayer_fb_gui.py
 

@@ -1,4 +1,5 @@
-# Phase 2 Quick Reference Card
+# Phase 2 Quick Reference Card (Legacy)
+Legacy quick reference. Use `docs/ai/PROJECT_GUIDE.md` for current direction and `docs/ai/TASK_LOG.md` for updates.
 
 ## Issues to Fix
 

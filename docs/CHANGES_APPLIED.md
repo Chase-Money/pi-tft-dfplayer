@@ -1,4 +1,5 @@
-# Changes Applied - Bug Fixes
+# Changes Applied - Bug Fixes (Legacy)
+Legacy log. For new changes, capture them in `docs/ai/TASK_LOG.md` per `docs/ai/PROJECT_GUIDE.md`.
 
 ## File: src/dfplayer_fb_gui.py
 
