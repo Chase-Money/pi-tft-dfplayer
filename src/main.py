@@ -26,7 +26,7 @@ from core.state import get_state, Track
 from core.events import get_event_bus, Events
 
 # Backend modules
-from backends.dfplayer_backend import DFPlayerBackend
+from backends.dfplayer_v2 import DFPlayerBackend
 
 # Utility modules
 from utils.metadata import load_metadata, ArtworkCache

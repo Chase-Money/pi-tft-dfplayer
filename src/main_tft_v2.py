@@ -17,7 +17,7 @@ import time
 import atexit
 from typing import Optional, Tuple
 
-from core.state_v2 import AppState
+from core.state import get_state, ApplicationState
 from core.config import get_config, ORIENTS
 from backends.dfplayer_v2 import DFPlayerBackend
 from hardware.framebuffer import Framebuffer
@@ -30,6 +30,7 @@ from ui.renderer_v2 import FramebufferRendererV2
 from ui.screens_v2.home import HomeScreen
 from ui.screens_v2.track_browser import TrackBrowserScreen
 from ui.screens_v2.now_playing import NowPlayingScreen
+from utils.track_catalog import load_track_catalog
 
 logging.basicConfig(
     level=logging.INFO,
@@ -327,10 +328,11 @@ class DFPlayerTFTApp:
 
     def _init_state(self) -> None:
         """Initialize application state."""
-        # Load tracks from catalog file or DFPlayer query
-        tracks = self._load_tracks()
+        # Load tracks from catalog file
+        tracks = load_track_catalog()
 
-        self.state = AppState(tracks=tracks)
+        self.state = get_state()
+        self.state.set_tracks(tracks)
         logger.info(f"State initialized with {len(tracks)} tracks")
 
     def _init_screen_manager(self) -> None:
@@ -437,23 +439,17 @@ class DFPlayerTFTApp:
         try:
             events = self.touch.get_events(timeout=0)  # Non-blocking
 
-            # Log when events are received
-            if events:
-                logger.info(f"[TOUCH] Received {len(events)} touch events from controller")
-
             for i, event in enumerate(events):
-                # Log raw event details
-                logger.debug(f"[TOUCH] Raw event {i}: {event.__dict__ if hasattr(event, '__dict__') else event}")
-                logger.info(f"[TOUCH] Processing event {i}: type={getattr(event, 'type', 'UNKNOWN')}, "
-                           f"x={getattr(event, 'x', '?')}, y={getattr(event, 'y', '?')}")
+                logger.debug(f"[TOUCH] Processing event {i}: type={getattr(event, 'type', 'UNKNOWN')}, "
+                             f"x={getattr(event, 'x', '?')}, y={getattr(event, 'y', '?')}")
 
                 # Convert touch event to UIEvent
                 ui_event = self._touch_to_ui_event(event)
                 if ui_event:
-                    logger.info(f"[TOUCH] Created UIEvent: {ui_event.type}, routing to screen manager")
+                    logger.debug(f"[TOUCH] Created UIEvent: {ui_event.type}, routing to screen manager")
                     self.screen_manager.handle_event(ui_event)
                 else:
-                    logger.warning(f"[TOUCH] Failed to convert touch event to UIEvent")
+                    logger.debug(f"[TOUCH] Failed to convert touch event to UIEvent")
 
         except Exception as e:
             logger.error(f"Error processing touch events: {e}")
