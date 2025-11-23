@@ -276,10 +276,12 @@ class TestErrorHandling:
     def test_thread_safety(self, dfplayer_backend):
         """Test that serial lock prevents concurrent access."""
         import threading
+        import _thread
 
         # This test verifies the lock exists and is used
         assert hasattr(dfplayer_backend, 'serial_lock')
-        assert isinstance(dfplayer_backend.serial_lock, threading.Lock)
+        # threading.Lock() returns a _thread.lock object, not a threading.Lock type
+        assert isinstance(dfplayer_backend.serial_lock, type(threading.Lock()))
 
 
 class TestPlaybackControl:
