@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Touchscreen entrypoint (v2) that keeps the original UI but fixes imports."""
+"""
+Legacy touchscreen entrypoint (v2). Canonical runtime entry: src/main.py.
+Retained for compatibility; do not extend.
+"""
 
 import importlib
 import os
@@ -49,4 +52,3 @@ def main():  # pragma: no cover - integration launcher
 
 if __name__ == '__main__':  # pragma: no cover - manual execution path
     main()
-
