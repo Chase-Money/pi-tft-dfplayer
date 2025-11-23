@@ -27,15 +27,24 @@ class TouchInput:
         self.calibration = None
 
     def _find_device(self, device_path):
-        """Find the touch device."""
+        """Find the touch device, preferring ADS7846/XPT2046 or any EV_ABS touchscreen."""
         if device_path and os.path.exists(device_path):
             return InputDevice(device_path)
         if os.path.exists("/dev/input/touchscreen"):
             return InputDevice("/dev/input/touchscreen")
+        # Prefer named touch controllers
         for path in list_devices():
             dev = InputDevice(path)
             name = (dev.name or "").lower()
-            if "ads7846" in name or "xpt2046" in name:
+            if "ads7846" in name or "xpt2046" in name or "touch" in name:
+                return dev
+        # Fallback: pick first device that exposes ABS_X/ABS_Y + BTN_TOUCH
+        for path in list_devices():
+            dev = InputDevice(path)
+            caps = dev.capabilities() if hasattr(dev, "capabilities") else {}
+            abs_caps = caps.get(ecodes.EV_ABS, [])
+            key_caps = caps.get(ecodes.EV_KEY, [])
+            if ecodes.ABS_X in abs_caps and ecodes.ABS_Y in abs_caps and ecodes.BTN_TOUCH in key_caps:
                 return dev
         devs = list_devices()
         if not devs:
@@ -55,24 +64,14 @@ class TouchInput:
         return self.device.fileno() if self.device else -1
 
     def read_event(self):
-        """Read a single touch event from the device.
-
-        Returns:
-            InputEvent or None: A single event object, or None if no event available.
-
-        Note:
-            Callers expect a single event object with .type and .code attributes,
-            not a list. This method returns the first event from device.read() or
-            None if no events are available.
-        """
+        """Read all available touch events from the device."""
         if not self.device:
-            return None
+            return []
         try:
             events = self.device.read()
-            # device.read() returns a list of events, but callers expect a single event
-            return events[0] if events else None
+            return events or []
         except BlockingIOError:
-            return None
+            return []
 
     def scale_xy(
         self,
@@ -99,6 +98,8 @@ class TouchInput:
 
         if orientation.get("SWAP_XY"):
             x, y = y, x
+            # When swapping axes, also swap target dimensions
+            screen_width, screen_height = screen_height, screen_width
         if orientation.get("FLIP_X"):
             x = max_x - (x - min_x)
         if orientation.get("FLIP_Y"):
@@ -145,6 +146,8 @@ class TouchInput:
             # Read available events
             try:
                 events = self.device.read()
+                if callable(events):
+                    events = events()
             except BlockingIOError:
                 continue
 
@@ -156,10 +159,13 @@ class TouchInput:
                         buf_x.clear()
                         buf_y.clear()
                 elif ev.type == ecodes.EV_ABS:
-                    if touching:
-                        if ev.code == ecodes.ABS_X:
-                            buf_x.append(ev.value)
-                        elif ev.code == ecodes.ABS_Y:
-                            buf_y.append(ev.value)
-                        if len(buf_x) >= samples and len(buf_y) >= samples:
-                            return int(statistics.median(buf_x)), int(statistics.median(buf_y))
+                    if ev.code == ecodes.ABS_X:
+                        buf_x.append(ev.value)
+                    elif ev.code == ecodes.ABS_Y:
+                        buf_y.append(ev.value)
+                    if len(buf_x) >= samples and len(buf_y) >= samples:
+                        return int(statistics.median(buf_x)), int(statistics.median(buf_y))
+
+            # If we have partial samples for both axes, return the median so far
+            if touching and buf_x and buf_y:
+                return int(statistics.median(buf_x)), int(statistics.median(buf_y))

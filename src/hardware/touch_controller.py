@@ -64,14 +64,14 @@ class TouchController:
         # Load gesture thresholds from config or use defaults
         if config:
             thresholds = config.get_touch_thresholds()
-            self.tap_threshold_ms = thresholds.get("tap_threshold_ms", 800)
-            self.drag_threshold_px = thresholds.get("drag_threshold_px", 80)
-            self.swipe_threshold_px = thresholds.get("swipe_threshold_px", 120)
+            self.tap_threshold_ms = thresholds.get("tap_threshold_ms", 400)
+            self.drag_threshold_px = thresholds.get("drag_threshold_px", 12)
+            self.swipe_threshold_px = thresholds.get("swipe_threshold_px", 48)
         else:
-            # Default thresholds (very relaxed for resistive touchscreen)
-            self.tap_threshold_ms = 800  # Max time for tap (very generous for slow taps)
-            self.drag_threshold_px = 80  # Min pixels for drag (very high threshold for noisy resistive touchscreen)
-            self.swipe_threshold_px = 120  # Min pixels for swipe
+            # Defaults tuned for responsiveness on resistive panels
+            self.tap_threshold_ms = 400
+            self.drag_threshold_px = 12
+            self.swipe_threshold_px = 48
 
     def get_events(self, timeout: float = 0.0) -> List[TouchEvent]:
         """
@@ -102,14 +102,16 @@ class TouchController:
         # Read all available events
         try:
             event_batch = self.touch.read_event()
-            logger.debug(f"[TOUCHCTRL] read_event() returned: {event_batch}")
-            if event_batch:
-                for evt in event_batch:
-                    logger.debug(f"[TOUCHCTRL] Processing raw event: type={evt.type}, code={evt.code}, value={evt.value}")
-                    touch_evt = self._process_raw_event(evt)
-                    if touch_evt:
-                        logger.info(f"[TOUCHCTRL] Created touch event: {touch_evt.type} at ({touch_evt.x}, {touch_evt.y})")
-                        events.append(touch_evt)
+            logger.debug(f"[TOUCHCTRL] read_event() returned {len(event_batch)} events")
+            # Normalize to list
+            if not isinstance(event_batch, (list, tuple)):
+                event_batch = [event_batch] if event_batch else []
+            for evt in event_batch:
+                logger.debug(f"[TOUCHCTRL] Processing raw event: type={evt.type}, code={evt.code}, value={evt.value}")
+                touch_evt = self._process_raw_event(evt)
+                if touch_evt:
+                    logger.debug(f"[TOUCHCTRL] Created touch event: {touch_evt.type} at ({touch_evt.x}, {touch_evt.y})")
+                    events.append(touch_evt)
         except Exception as e:
             logger.error(f"Error reading touch events: {e}", exc_info=True)
 
