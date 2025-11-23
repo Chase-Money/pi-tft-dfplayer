@@ -18,8 +18,8 @@ except Exception:  # pragma: no cover - allow import without PIL in non-device e
     ImageFont = None  # type: ignore
     PIL_AVAILABLE = False
 
-from src.ui.draw_utils import xywh_to_xyxy, clamp
-from src.utils.metadata import load_artwork_thumbnail
+from .draw_utils import xywh_to_xyxy, clamp
+from utils.metadata import load_artwork_thumbnail
 
 
 def draw_play_indicator(draw, playing: bool, pos: Tuple[int, int], font, color=(230, 230, 230)) -> None:
