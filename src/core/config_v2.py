@@ -1,14 +1,5 @@
 """
-DEPRECATED: This module is deprecated and scheduled for removal.
-
-Use `src.core.config` instead. All functionality has been merged
-into the canonical config module.
-
-This file is kept temporarily for backward compatibility with tests.
-
----
-
-Configuration persistence system for DFPlayer application.
+ConfigV2: canonical configuration manager for the v2 application stack.
 
 Provides thread-safe loading and saving of user preferences and system state
 to ~/.dfplayer_config.json with atomic writes and validation.
@@ -61,7 +52,12 @@ class Config:
         },
         "ui_theme": "default",
         "screen_brightness": 100,
-        "auto_play": False
+        "auto_play": False,
+        "paths": {
+            "metadata": "/boot/dfplayer_metadata.json",
+            "track_catalog": None,
+            "artwork_root": None,
+        },
     }
 
     def __init__(self, config_path: Optional[Path] = None):
@@ -332,6 +328,27 @@ class Config:
     def set_touch_orientation_index(self, index: int) -> None:
         """Set touch orientation index (legacy compatibility)."""
         self.set("touch_orientation_index", int(index))
+
+    def get_metadata_path(self) -> Optional[str]:
+        """Get metadata file path with env override."""
+        env_path = os.environ.get("DFPLAYER_METADATA")
+        if env_path:
+            return env_path
+        return self.get("paths", {}).get("metadata", self.DEFAULT_VALUES["paths"]["metadata"])
+
+    def get_artwork_root(self) -> Optional[str]:
+        """Get artwork root directory with env override."""
+        env_path = os.environ.get("DFPLAYER_ART_ROOT")
+        if env_path:
+            return env_path
+        return self.get("paths", {}).get("artwork_root", None)
+
+    def get_track_catalog_path(self) -> Optional[str]:
+        """Get track catalog file path with env override."""
+        env_path = os.environ.get("DFPLAYER_TRACK_CATALOG")
+        if env_path:
+            return env_path
+        return self.get("paths", {}).get("track_catalog", None)
 
     def get_touch_thresholds(self) -> Dict[str, int]:
         """Get touch gesture threshold parameters."""

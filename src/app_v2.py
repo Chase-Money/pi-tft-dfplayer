@@ -3,13 +3,11 @@ from __future__ import annotations
 
 import atexit
 import logging
-import select
-import statistics
 from typing import Dict, List, Optional, Tuple
 
 from PIL import Image, ImageDraw, ImageFont
 
-from core.config import Config, get_config
+from core.config_v2 import Config as ConfigV2
 from core.state import ApplicationState, get_state
 from utils.track_catalog import load_track_catalog
 from utils.metadata import load_metadata
@@ -29,7 +27,8 @@ class Application:
     """Unified touchscreen application built on the ScreenManagerV2 stack."""
 
     def __init__(self, config=None) -> None:
-        self.config: Config = config or get_config()
+        self.config: ConfigV2 = config or ConfigV2()
+        self.config.load()
 
         try:
             self.framebuffer = Framebuffer()
