@@ -224,6 +224,12 @@ class Application:
         }
         self.screen_manager.render(context)
 
+    def get_status(self) -> Optional[Tuple[str, str]]:
+        """Return optional status banner (message, level) for UI display."""
+        # Future: Return status messages for system events
+        # e.g., ("Low battery", "warning") or ("Track loaded", "info")
+        return None
+
     def cleanup(self) -> None:
         self.running = False
         if self.backend:
