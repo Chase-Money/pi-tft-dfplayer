@@ -5,13 +5,12 @@ from __future__ import annotations
 from PIL import Image, ImageDraw, ImageFont
 
 from ..framework.manager import ScreenView
-from ..framework.widgets import ButtonWidget, SliderWidget
+from ..framework.widgets import ButtonWidget, SliderWidget, ArtworkWidget
 from ..framework.events import UIEvent
 from ..draw_utils import clamp
 from ..views import (
     draw_play_indicator,
     draw_track_number,
-    draw_artwork_panel,
     draw_title_line,
     draw_volume_bar,
     draw_status_banner,
@@ -31,6 +30,7 @@ class NowPlayingScreen(ScreenView):
         self.back_button = None
         self.play_button = None
         self.slider = None
+        self.artwork_widget = None
         self._last_resolution = None
 
     def render(self, context: dict) -> None:
@@ -93,17 +93,14 @@ class NowPlayingScreen(ScreenView):
         track_num_x = margin + max(20, int(44 * scale))
         draw_track_number(draw, number, (track_num_x, info_y + max(1, int(2 * scale))), fonts["medium"])
 
-        # Draw artwork or placeholder
-        if artwork:
-            draw_artwork_panel(image, draw, artwork, (margin, artwork_y, artwork_size, artwork_size))
-        else:
-            draw.rectangle(
-                (margin, artwork_y, margin + artwork_size, artwork_y + artwork_size),
-                outline=palette.accent_alt,
-                width=max(1, int(2 * scale))
-            )
-            no_art_y = artwork_y + artwork_size // 2 - max(4, int(8 * scale))
-            draw.text((margin + max(4, int(8 * scale)), no_art_y), "No artwork", font=fonts["small"], fill=palette.text_dim)
+        # Create/update artwork widget if needed
+        artwork_rect = (margin, artwork_y, artwork_size, artwork_size)
+        if not self.artwork_widget or self.artwork_widget.rect != artwork_rect:
+            self.artwork_widget = ArtworkWidget(artwork_rect)
+
+        # Set and draw artwork
+        self.artwork_widget.set_artwork(artwork, self.state)
+        self.artwork_widget.draw(image, draw, fonts["small"], palette)
 
         # Draw title with appropriate character limit based on width
         max_chars = max(10, int(w / (8 * scale)))  # Rough estimate

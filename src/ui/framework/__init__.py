@@ -2,7 +2,7 @@
 
 from .manager import ScreenManagerV2, ScreenView
 from .events import UIEvent
-from .widgets import ButtonWidget, ListWidget, SliderWidget
+from .widgets import ButtonWidget, ListWidget, SliderWidget, ArtworkWidget
 
 __all__ = [
     "ScreenManagerV2",
@@ -11,5 +11,6 @@ __all__ = [
     "ButtonWidget",
     "ListWidget",
     "SliderWidget",
+    "ArtworkWidget",
 ]
 

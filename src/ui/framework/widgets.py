@@ -181,3 +181,105 @@ class SliderWidget:
         clamped = clamp(x, rx, rx + rw)
         ratio = (clamped - rx) / max(1, rw)
         return int(round(self.min_value + ratio * (self.max_value - self.min_value)))
+
+
+class ArtworkWidget:
+    """Widget for displaying album artwork with caching."""
+
+    def __init__(self, rect: Rect):
+        """Initialize artwork widget.
+
+        Args:
+            rect: (x, y, width, height) for the artwork display area
+        """
+        self.rect = rect
+        self._current_artwork_path: Optional[str] = None
+        self._cached_thumbnail: Optional[any] = None
+
+    def set_artwork(self, artwork_path: Optional[str], state=None) -> None:
+        """Set the artwork to display.
+
+        Args:
+            artwork_path: Path to artwork image file, or None for no artwork
+            state: Optional ApplicationState for caching
+        """
+        if artwork_path == self._current_artwork_path:
+            return  # Already loaded
+
+        self._current_artwork_path = artwork_path
+        self._cached_thumbnail = None
+
+        if not artwork_path:
+            return
+
+        # Check state cache first
+        if state:
+            cached = state.get_cached_artwork(artwork_path)
+            if cached:
+                self._cached_thumbnail = cached
+                return
+
+        # Load and cache
+        try:
+            from utils.metadata import load_artwork_thumbnail
+            x, y, w, h = self.rect
+            size = (w, h)
+            thumbnail = load_artwork_thumbnail(artwork_path, size=size)
+            if thumbnail:
+                self._cached_thumbnail = thumbnail
+                if state:
+                    state.cache_artwork(artwork_path, thumbnail)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Failed to load artwork {artwork_path}: {e}")
+            self._cached_thumbnail = None
+
+    def draw(self, image, draw: ImageDraw.ImageDraw, font=None, palette=None) -> None:
+        """Draw the artwork or placeholder.
+
+        Args:
+            image: PIL Image to paste artwork onto
+            draw: PIL ImageDraw for drawing placeholder
+            font: Font for "No artwork" text
+            palette: Theme palette for colors
+        """
+        x, y, w, h = self.rect
+
+        if self._cached_thumbnail:
+            # Paste artwork
+            try:
+                image.paste(self._cached_thumbnail, (x, y))
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"Failed to paste artwork: {e}")
+                self._draw_placeholder(draw, font, palette)
+        else:
+            self._draw_placeholder(draw, font, palette)
+
+    def _draw_placeholder(self, draw: ImageDraw.ImageDraw, font=None, palette=None) -> None:
+        """Draw a placeholder when no artwork is available."""
+        x, y, w, h = self.rect
+
+        # Get colors from palette or use defaults
+        if palette:
+            outline_color = getattr(palette, 'accent_alt', (100, 120, 150))
+            text_color = getattr(palette, 'text_dim', (140, 140, 140))
+        else:
+            outline_color = (100, 120, 150)
+            text_color = (140, 140, 140)
+
+        # Draw outline
+        draw.rectangle((x, y, x + w, y + h), outline=outline_color, width=2)
+
+        # Draw "No artwork" text
+        if font:
+            text = "No artwork"
+            try:
+                bbox = draw.textbbox((0, 0), text, font=font)
+                tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+                text_x = x + (w - tw) // 2
+                text_y = y + (h - th) // 2
+                draw.text((text_x, text_y), text, font=font, fill=text_color)
+            except Exception:
+                # Fallback if textbbox fails
+                draw.text((x + 8, y + h // 2 - 8), text, font=font, fill=text_color)

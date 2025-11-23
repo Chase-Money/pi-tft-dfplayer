@@ -1,4 +1,4 @@
-"""Integration tests for main_tft_v2.py application."""
+"""Integration tests for main_tft_v2.py application (archived legacy code)."""
 
 import os
 import sys
@@ -6,10 +6,13 @@ import unittest
 from unittest.mock import Mock, patch, MagicMock
 from typing import Optional
 
-# Add src to path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'src')))
+# Add archive to path for legacy code
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'archive')))
 
 from main_tft_v2 import DFPlayerTFTApp
+
+# Add src to path for framework imports
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'src')))
 from ui.framework.events import UIEvent
 
 
