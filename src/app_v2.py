@@ -212,11 +212,15 @@ class Application:
 
     # ------------------------------------------------------------------
     def render(self) -> None:
+        # Calculate scale factor based on screen dimensions (reference: 480x320)
+        scale = min(self.framebuffer.width / 480, self.framebuffer.height / 320)
+
         context = {
             "image": self.image,
             "draw": self.draw,
             "fonts": self.fonts,
             "state": self.state,
+            "scale": scale,
         }
         self.screen_manager.render(context)
 
