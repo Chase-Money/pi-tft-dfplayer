@@ -178,6 +178,11 @@ class Application:
         """
         if not self.backend:
             return False
+
+        # Check if backend supports event polling (not all backends do)
+        if not hasattr(self.backend, 'poll_event'):
+            return False
+
         refreshed = False
         max_events = 100  # Safety limit to prevent infinite loop if events flood
         event_count = 0
