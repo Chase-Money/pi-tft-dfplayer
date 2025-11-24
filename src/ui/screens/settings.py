@@ -22,9 +22,7 @@ class SettingsScreen(ScreenView):
         self._last_resolution = None
 
     def on_enter(self, **kwargs):
-        app = self._app()
-        if app:
-            self._orientation_idx = app.orientation_index
+        self._orientation_idx = 0  # Stub: orientation not yet implemented in v2
         self._last_resolution = None
 
     def render(self, context: dict) -> None:
@@ -94,11 +92,9 @@ class SettingsScreen(ScreenView):
         return f"Orientation {self._orientation_idx + 1}/8"
 
     def _cycle_orientation(self) -> None:
-        app = self._app()
-        if not app:
-            return
+        # Stub: Touch orientation not yet implemented in v2 app
         self._orientation_idx = (self._orientation_idx + 1) % 8
-        app.set_touch_orientation(self._orientation_idx)
+        # TODO: Implement touch orientation in app_v2.py
 
     def _open_calibration(self) -> None:
         self.manager.push("calibration")
