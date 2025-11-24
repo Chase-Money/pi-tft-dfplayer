@@ -1,7 +1,7 @@
 from PIL import Image, ImageDraw, ImageFont
 
-from src.ui.framework_v2.widgets import ButtonWidget, ListWidget, SliderWidget
-from src.ui.framework_v2.events import UIEvent
+from src.ui.framework.widgets import ButtonWidget, ListWidget, SliderWidget
+from src.ui.framework.events import UIEvent
 
 
 def make_draw():
@@ -36,3 +36,13 @@ def test_slider_widget_value_from_x():
     event = UIEvent("drag", {"pos": (75, 5)})
     assert slider.handle_event(event)
     assert slider.value >= 20
+
+
+def test_list_widget_scroll_pixels_clamps_bounds():
+    widget = ListWidget(["one", "two", "three", "four"], visible_rows=2)
+    widget.row_height = 20
+    assert widget.scroll_pixels(40)  # scroll down
+    assert widget.scroll == 2
+    assert not widget.scroll_pixels(0)  # no delta
+    assert widget.scroll_pixels(-40)  # scroll up
+    assert widget.scroll == 0

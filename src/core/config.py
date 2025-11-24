@@ -44,14 +44,21 @@ class Config:
         "touch": {
             "orientation_index": 6,
             "calibration": None,  # (minx, maxx, miny, maxy) or None
+            "thresholds": {
+                "tap_threshold_ms": 800,     # Max time for tap (ms) - tuned for resistive touchscreen
+                "drag_threshold_px": 80,     # Min pixels for drag - high threshold for noisy resistive touchscreen
+                "swipe_threshold_px": 120,   # Min pixels for swipe
+            },
         },
         "audio": {
             "volume": 18,
             "last_backend": "dfplayer",  # "dfplayer" or "spotify"
+            "last_track": 1,  # Last played track number
         },
         "ui": {
             "theme": "default",
             "brightness": 100,
+            "auto_play": False,  # Auto-play on startup
         },
         "paths": {
             "metadata": "/boot/dfplayer_metadata.json",
@@ -95,6 +102,8 @@ class Config:
             except json.JSONDecodeError as e:
                 logger.error(f"Invalid JSON in config file: {e}")
                 logger.warning("Using default configuration")
+                # Backup corrupted config
+                self._backup_corrupted_config()
                 return self.DEFAULTS.copy()
             except Exception as e:
                 logger.error(f"Error loading config: {e}")
@@ -133,6 +142,8 @@ class Config:
         Returns:
             Configuration value or default
         """
+        if key_path == "touch_thresholds":
+            return self.get_touch_thresholds()
         keys = key_path.split('.')
         value = self.data
 
@@ -261,6 +272,55 @@ class Config:
         if env_path:
             return env_path
         return self.get("paths.track_catalog")
+
+    def get_touch_thresholds(self) -> Dict[str, int]:
+        """Get touch gesture threshold parameters."""
+        return self.get("touch.thresholds", self.DEFAULTS["touch"]["thresholds"])
+
+    def set_touch_thresholds(
+        self,
+        tap_threshold_ms: int = 800,
+        drag_threshold_px: int = 80,
+        swipe_threshold_px: int = 120
+    ) -> None:
+        """Set touch gesture threshold parameters."""
+        self.set("touch.thresholds", {
+            "tap_threshold_ms": max(0, tap_threshold_ms),
+            "drag_threshold_px": max(0, drag_threshold_px),
+            "swipe_threshold_px": max(0, swipe_threshold_px)
+        })
+
+    def get_last_track(self) -> int:
+        """Get last played track number."""
+        return int(self.get("audio.last_track", 1))
+
+    def set_last_track(self, track_number: int) -> None:
+        """Set last played track number."""
+        self.set("audio.last_track", max(1, track_number))
+
+    def get_auto_play(self) -> bool:
+        """Get auto-play on startup setting."""
+        return bool(self.get("ui.auto_play", False))
+
+    def set_auto_play(self, enabled: bool) -> None:
+        """Set auto-play on startup setting."""
+        self.set("ui.auto_play", bool(enabled))
+
+    def _backup_corrupted_config(self) -> None:
+        """Create backup of corrupted config file."""
+        try:
+            if os.path.exists(self.config_path):
+                backup_path = self.config_path + ".corrupted"
+                # Rename existing config to .corrupted
+                if os.path.exists(backup_path):
+                    # If backup already exists, append timestamp
+                    import time
+                    timestamp = int(time.time())
+                    backup_path = f"{self.config_path}.corrupted.{timestamp}"
+                os.rename(self.config_path, backup_path)
+                logger.info(f"Corrupted config backed up to {backup_path}")
+        except Exception as e:
+            logger.error(f"Failed to backup corrupted config: {e}")
 
 
 # Global configuration instance

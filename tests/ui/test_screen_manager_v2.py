@@ -1,12 +1,12 @@
-from src.ui.framework_v2.manager import ScreenManagerV2, ScreenView
-from src.ui.framework_v2.events import UIEvent
+from src.ui.framework.manager import ScreenManagerV2, ScreenView
+from src.ui.framework.events import UIEvent
 
 
 class DummyScreen(ScreenView):
     name = "dummy"
 
-    def __init__(self, manager):
-        super().__init__(manager)
+    def __init__(self, manager, services=None):
+        super().__init__(manager, services)
         self.events = []
 
     def handle_event(self, event):

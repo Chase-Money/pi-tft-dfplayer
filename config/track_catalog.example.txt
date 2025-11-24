@@ -1,0 +1,47 @@
+# DFPlayer Track Catalog Example
+#
+# This file maps track numbers to human-readable titles.
+# The DFPlayer reads files from its SD card in numeric order (0001.mp3, 0002.mp3, etc.)
+#
+# Format options:
+#   Pipe-separated (recommended):    number|title
+#   Space-separated:                 number title
+#
+# Lines starting with # are comments
+# Empty lines are ignored
+#
+# Example entries:
+
+1|Intro Theme
+2|Main Menu Music
+3|Level 1 - Forest
+4|Level 1 - Battle Theme
+5|Level 2 - Desert
+6|Level 2 - Boss Battle
+7|Victory Fanfare
+8|Game Over
+9|Credits Roll
+10|Hidden Track
+
+# You can also use space-separated format:
+# 11 Bonus Stage
+# 12 Secret Ending
+
+# Track numbers must match the file numbering on your DFPlayer SD card:
+#   /mp3/0001.mp3 → Track 1
+#   /mp3/0002.mp3 → Track 2
+#   etc.
+#
+# To use this catalog:
+#   1. Copy this file to: config/track_catalog.txt
+#   2. Edit the track numbers and titles to match your SD card
+#   3. Restart the application
+#
+# Alternative locations the app searches:
+#   - $DFPLAYER_TRACK_CATALOG environment variable
+#   - config/track_catalog.txt (this directory)
+#   - /boot/dfplayer_tracks.txt
+#
+# If no catalog is found, the app will:
+#   1. Try to query the DFPlayer for file count
+#   2. Fall back to 30 placeholder tracks

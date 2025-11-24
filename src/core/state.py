@@ -18,6 +18,7 @@ class Track:
     title: str
     artist: Optional[str] = None
     artwork_path: Optional[str] = None
+    artwork: Optional[str] = None
 
 
 @dataclass
@@ -48,7 +49,7 @@ class ApplicationState:
         track_scroll: Current scroll position in track list
     """
 
-    def __init__(self):
+    def __init__(self, tracks: Optional[List[Any]] = None):
         """Initialize application state."""
         self.tracks: List[Track] = []
         self.playback = PlaybackState()
@@ -60,14 +61,46 @@ class ApplicationState:
         self.current_artwork_path: Optional[str] = None
         self.current_artwork_thumb: Optional[Any] = None
 
+        # O(1) lookup index: track_number -> track_index
+        self._track_number_to_index: Dict[int, int] = {}
+        if tracks:
+            self.set_tracks(tracks)
+
+    def _normalize_tracks(self, tracks: List[Any]) -> List[Track]:
+        normalized: List[Track] = []
+        for t in tracks:
+            if isinstance(t, Track):
+                normalized.append(t)
+            elif isinstance(t, dict):
+                number = int(t.get("number", len(normalized) + 1))
+                title = t.get("title") or f"Track {number}"
+                art = t.get("artwork") or t.get("artwork_path")
+                normalized.append(
+                    Track(
+                        number=number,
+                        title=title,
+                        artist=t.get("artist"),
+                        artwork_path=art,
+                        artwork=art
+                    )
+                )
+        return normalized
+
     def set_tracks(self, tracks: List[Track]) -> None:
         """Set track catalog.
 
         Args:
             tracks: List of Track objects
         """
-        self.tracks = tracks
+        self.tracks = self._normalize_tracks(tracks)
         logger.info(f"Track catalog updated: {len(tracks)} tracks")
+
+        # Rebuild O(1) lookup index
+        self._track_number_to_index = self._build_track_index()
+
+        # Apply metadata to tracks if available
+        if self.metadata:
+            self._apply_metadata_to_tracks()
 
         # Reset selection if out of bounds
         if self.tracks:
@@ -91,7 +124,7 @@ class ApplicationState:
         return None
 
     def get_track_by_number(self, number: int) -> Optional[Track]:
-        """Get track by track number.
+        """Get track by track number using O(1) lookup.
 
         Args:
             number: Track number
@@ -99,10 +132,25 @@ class ApplicationState:
         Returns:
             Track object or None if not found
         """
-        for track in self.tracks:
-            if track.number == number:
-                return track
+        index = self._track_number_to_index.get(number)
+        if index is not None:
+            return self.get_track(index)
         return None
+
+    def get_index_by_number(self, number: int) -> Optional[int]:
+        """Get track index by track number using O(1) lookup.
+
+        This method uses a pre-built dictionary index for O(1) lookups
+        instead of O(n) linear search. The index is maintained automatically
+        when tracks are modified.
+
+        Args:
+            number: Track number
+
+        Returns:
+            Track index or None if not found
+        """
+        return self._track_number_to_index.get(number)
 
     def get_selected_track(self) -> Optional[Track]:
         """Get currently selected track.
@@ -212,6 +260,10 @@ class ApplicationState:
         self.metadata = metadata
         logger.info(f"Metadata loaded for {len(metadata)} tracks")
 
+        # Apply metadata to existing tracks
+        if self.tracks:
+            self._apply_metadata_to_tracks()
+
     def get_track_metadata(self, track_number: int) -> Dict[str, Any]:
         """Get metadata for track number.
 
@@ -260,6 +312,39 @@ class ApplicationState:
         # Clamp scroll position
         max_scroll = max(0, len(self.tracks) - visible_count)
         self.track_scroll = max(0, min(self.track_scroll, max_scroll))
+
+    def _build_track_index(self) -> Dict[int, int]:
+        """Build O(1) lookup index mapping track numbers to list indices.
+
+        Returns:
+            Dict mapping track.number -> list index
+        """
+        return {track.number: idx for idx, track in enumerate(self.tracks)}
+
+    def _apply_metadata_to_tracks(self) -> None:
+        """Apply metadata to tracks (enrich track objects with metadata).
+
+        Updates track title, artist, and artwork_path from metadata dictionary.
+        Called automatically when metadata or tracks are set.
+        """
+        if not self.metadata:
+            return
+
+        for track in self.tracks:
+            meta = self.metadata.get(track.number)
+            if not meta:
+                continue
+
+            # Enrich track with metadata
+            if meta.get("title"):
+                track.title = meta["title"]
+            if meta.get("artist"):
+                track.artist = meta["artist"]
+            if meta.get("artwork"):
+                track.artwork_path = meta["artwork"]
+                track.artwork = meta["artwork"]
+
+        logger.debug(f"Applied metadata to {len(self.tracks)} tracks")
 
 
 # Global state instance

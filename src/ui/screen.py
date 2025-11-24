@@ -61,12 +61,12 @@ class Screen:
         # Metadata
         self.draw.rounded_rectangle(INFO_RECT, radius=12, fill=(38, 42, 60))
         metadata = metadata_manager.get_metadata(state.current_track_number)
-        title = metadata.get("title") or f"Track {state.current_track_number:04d}"
+        title = metadata.get("title") or f"Track {state.current_track_number:03d}"
         artist = metadata.get("artist") or "Unknown Artist"
 
         self.draw_wrapped_text(title, self.font_medium, INFO_RECT[0] + 12, INFO_RECT[1] + 8, INFO_RECT[2] - 24, fill=(235, 235, 235))
         self.draw_wrapped_text(artist, self.font_small, INFO_RECT[0] + 12, INFO_RECT[1] + 44, INFO_RECT[2] - 24, fill=(195, 195, 200))
-        self.draw.text((INFO_RECT[0] + 12, INFO_RECT[1] + INFO_RECT[3] - 24), f"#{state.current_track_number:04d}", font=self.font_small, fill=(175, 175, 185))
+        self.draw.text((INFO_RECT[0] + 12, INFO_RECT[1] + INFO_RECT[3] - 24), f"#{state.current_track_number:03d}", font=self.font_small, fill=(175, 175, 185))
 
     def draw_calibration_target(self, x, y):
         """Draw a calibration target on the screen."""

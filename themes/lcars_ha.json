@@ -1,0 +1,33 @@
+{
+  "name": "LCARS HA",
+  "description": "Palette derived from th3jesta/ha-lcars theme variables",
+  "base_font": "Antonio",
+  "mono_font": "ShareTechMono",
+  "palette": {
+    "bg": "#000000",
+    "panel": "#f5f6fa",
+    "text": "#d3d3d3",
+    "text_dim": "#828ba6",
+    "accents": ["#ffcc33", "#4455ff", "#ff7700", "#33cc99", "#ddbbff", "#cc4499"],
+    "status_good": "#33cc99",
+    "status_warn": "#ffcc33",
+    "status_bad": "#ff2200"
+  },
+  "metrics": {
+    "radius_lg": 34,
+    "radius_sm": 20,
+    "stroke": 2,
+    "padding": 12,
+    "gap": 10,
+    "touch_min": 44
+  },
+  "layout": {
+    "header_color": "#4455ff",
+    "rail_color": "#ff7700",
+    "button_primary": "#ffcc33",
+    "button_secondary": "#f5f6fa",
+    "progress_height": 10,
+    "volume_width": 22,
+    "accent_cycle": ["accents[0]", "accents[1]", "accents[2]", "accents[3]"]
+  }
+}

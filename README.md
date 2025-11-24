@@ -1,97 +1,129 @@
-pi-tft-dfplayer
+# pi-tft-dfplayer
 
-DIY touchscreen MP3 player for Raspberry Pi Zero 2 W with a 3.5″ SPI TFT (ILI9486 + XPT2046/ADS7846) and a DFPlayer Mini.
-Direct-to-framebuffer UI (no X/Wayland), on-device touch calibration, orientation cycling, and UART control of DFPlayer.
+DIY touchscreen MP3 player for a Raspberry Pi Zero 2 W paired with a 3.5″ SPI TFT (ILI9486 + XPT2046/ADS7846) and a DFPlayer Mini. The UI renders directly to `/dev/fb1`, runs without X/Wayland, ships on-device calibration/orientation tools, and talks to the DFPlayer over UART.
 
-Features
-	•	Direct /dev/fb1 drawing (RGB565) → fast, no desktop needed
-	•	On-device CAL (four-point) and CFG (8 orientations) buttons
-	•	Big Play/Prev/Next/Stop controls
-	•	Smooth volume bar (0–30) via DFPlayer command 0x06
-	•	Systemd service for auto-start
+## Highlights
+- Direct RGB565 drawing to `/dev/fb1` → no desktop stack required
+- On-device CAL (four-point) + CFG (8 orientations) workflows
+- Large Play/Prev/Next/Stop controls tuned for fingers
+- Hardware volume bar (0–30) via DFPlayer 0x06 command
+- Systemd service for auto-start on boot
 
-Hardware
-	•	Raspberry Pi Zero 2 W (32-bit Pi OS used here)
-	•	3.5″ SPI TFT ILI9486 w/ resistive touch XPT2046/ADS7846
-	•	DFPlayer Mini (micro-SD with /mp3/0001.mp3, /mp3/0002.mp3, …)
-	•	4–8 Ω speaker on DFPlayer SPK+ / SPK-
+## Hardware
+- Raspberry Pi Zero 2 W (32-bit Pi OS)
+- 3.5″ SPI TFT ILI9486 with XPT2046/ADS7846 touch controller
+- DFPlayer Mini + micro-SD (`/mp3/0001.mp3`, `/mp3/0002.mp3`, …)
+- 4–8 Ω speaker tied to DFPlayer `SPK+ / SPK-`
 
-Wiring (summary)
-	•	TFT to SPI0 + its control pins (per your panel’s pinout):
-	•	LCD_CS → a free chip-select (often GPIO8/CE0)
-	•	LCD_SCK → GPIO11/SCLK
-	•	LCD_SI(MOSI) → GPIO10/MOSI
-	•	LCD_RS(DC) → a free GPIO (panel doc)
-	•	LCD_RST → a free GPIO or Pi reset
-	•	5 V and GND to Pi 5 V/GND
-	•	Touch (XPT2046/ADS7846) on same SPI bus:
-	•	TP_CS → another CS (often GPIO7/CE1)
-	•	TP_SCK/TP_SI share SCLK/MOSI, TP_SO to MISO (GPIO9)
-	•	TP_IRQ to a free GPIO (optional interrupt)
-	•	DFPlayer:
-	•	VCC → 5 V, GND → GND
-	•	RX  ← Pi TXD0 (GPIO14)
-	•	TX  → Pi RXD0 (GPIO15) (optional, for query)
-	•	SPK+ / SPK- → speaker
+## Wiring Summary
+- **Display (SPI0)**
+  - `LCD_CS` → GPIO8/CE0 (or any spare chip-select)
+  - `LCD_SCK` → GPIO11/SCLK
+  - `LCD_SI (MOSI)` → GPIO10/MOSI
+  - `LCD_RS (DC)` → spare GPIO (per panel docs)
+  - `LCD_RST` → spare GPIO (or Pi reset)
+  - `5V/GND` → Pi power pins
+- **Touch (same SPI bus)**
+  - `TP_CS` → GPIO7/CE1
+  - `TP_SCK`, `TP_SI` share SCLK/MOSI, `TP_SO` → GPIO9/MISO
+  - `TP_IRQ` → spare GPIO (optional interrupt)
+- **DFPlayer**
+  - `VCC` → 5V, `GND` → ground
+  - `RX` ← Pi `TXD0` (GPIO14)
+  - `TX` → Pi `RXD0` (GPIO15, optional for responses)
+  - `SPK+ / SPK-` → speaker
 
-If your panel already exposes a ready-made overlay (e.g., fb_ili9486/ads7846), you should see /dev/fb1 and a touch event* device. This app works as long as those exist.
+If your TFT exposes an overlay such as `fb_ili9486` + `ads7846`, `/dev/fb1` and a touch event device will appear automatically—this app only requires those device nodes.
 
-Software versions (snapshot)
+## Software Snapshot
+- Linux kernel: `uname -a`
+- Pi OS release: `/etc/os-release`
+- Python: `python3 --version`
+- Packages: `python3-serial`, `python3-evdev`, `python3-pil` (Pillow)
 
-This repo was built/tested on:
-	•	Linux kernel: output of uname -a
-	•	Pi OS: contents of /etc/os-release
-	•	Python: python3 --version
-	•	Packages: python3-serial, python3-evdev, python3-pil (Pillow)
+Generate a `SYSTEM.md` snapshot at any time:
 
-You can regenerate a SYSTEM.md with:
-
+```bash
 ./scripts/system_snapshot.sh
+```
 
-Quick start
+## Quick Start
+1. **Install dependencies**
+   ```bash
+   ./scripts/install_prereqs.sh
+   ```
+2. **Apply UART + touch tweaks** (frees UART0, installs udev alias) and reboot:
+   ```bash
+   ./scripts/apply_system_tweaks.sh
+   sudo reboot
+   ```
+3. **Verify devices after reboot**
+   ```bash
+   ls /dev/fb1
+   cat /sys/class/graphics/fb1/name   # should mention ili948x
+   ls /dev/input/event*               # confirm touchscreen present
+   ```
+4. **Run manually**
+   ```bash
+   sudo -E python3 src/dfplayer_fb_gui.py
+   ```
+5. **Or install the service**
+   ```bash
+   sudo cp systemd/dfplayer-fb.service /etc/systemd/system/
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now dfplayer-fb
+   ```
 
-# 1) Get deps
-./scripts/install_prereqs.sh
+> **Note:** The systemd unit assumes the repo lives at `/home/pi/pi-tft-dfplayer`. If you clone elsewhere, update `WorkingDirectory` in `systemd/dfplayer-fb.service` (or provide a drop-in) so the service can locate `src/dfplayer_fb_gui.py`.
 
-# 2) Apply system tweaks (frees UART0 for DFPlayer, udev rule for touch)
-./scripts/apply_system_tweaks.sh
-sudo reboot
+## Hardware profiles (v2)
 
-After reboot, verify:
+This repo ships two v2 hardware profiles that run independently of the legacy touchscreen service:
 
-ls /dev/fb1
-cat /sys/class/graphics/fb1/name        # should mention ili948x
-ls /dev/input/event*                     # touch present
-
-Run the app
-
-# manual test
-sudo -E python3 src/dfplayer_fb_gui.py
-
-# or enable service
-sudo cp systemd/dfplayer-fb.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now dfplayer-fb
-
-> **Note:** The systemd unit expects this repository to live at
-> `/home/pi/pi-tft-dfplayer`. If you clone it elsewhere, update
-> `WorkingDirectory` in `systemd/dfplayer-fb.service` (or create a drop-in) so
-> the service can locate `src/dfplayer_fb_gui.py`.
-
-Hardware profiles (v2)
-
-This repo now ships v2 launchers for two hardware profiles that run independently of the legacy touchscreen service:
-
-- Touchscreen v2 (3.5" ILI9486 + XPT2046/ADS7846)
+- **Touchscreen v2** (3.5" ILI9486 + XPT2046/ADS7846)
   - Manual: `python3 src/main_touch_v2.py`
   - Service: `sudo cp systemd/dfplayer-fb-v2.service /etc/systemd/system/ && sudo systemctl enable --now dfplayer-fb-v2`
   - Setup/troubleshooting: see `docs/touch_v2_setup.md`
+  - Experimental screen-manager UI (Phase 2): set `DFPLAYER_UI_FRAMEWORK=1` before running `python3 src/main.py` to launch the new Home/Browser/Now Playing stack built on `ui/framework_v2`
 
-- 1.44" Buttons Variant (ST7735 + GPIO buttons/joystick)
+- **1.44" Buttons Variant** (ST7735 + GPIO buttons/joystick)
   - Install deps + enable SPI: `./scripts/install_st7735_buttons_v2.sh` then reboot
   - Manual (off-device dev with emulator): `DFPLAYER_USE_EMULATOR=1 DFPLAYER_HW_PROFILE=st7735_buttons python3 src/main_v2.py`
   - Service (on-device): `sudo cp systemd/dfplayer-144lcd.service /etc/systemd/system/ && sudo systemctl enable --now dfplayer-144lcd`
   - Setup/troubleshooting: see `docs/st7735_setup.md`
+
+## How to Proceed on Your Device (Phase 2 Pilot)
+
+1. **Pick the right launcher**
+   - Touchscreen: `sudo -E python3 src/main_touch_v2.py`
+   - Button HAT: `DFPLAYER_HW_PROFILE=st7735_buttons python3 src/main_v2.py` (add `DFPLAYER_USE_EMULATOR=1` on desktops).
+2. **Preview the new screen manager** by exporting `DFPLAYER_UI_FRAMEWORK=1` before running `python3 src/main.py`. This now boots the full `src/app_v2.Application` stack (AppState + ScreenManagerV2 + DFPlayer backend) instead of the ad-hoc adapter embedded in `main.py`.
+3. **Exercise the Application/AppState stack** via `python3 src/main_v3.py`. This boots `src/app_v2.Application`, initializes the shared AppState + ScreenManagerV2, and is the entrypoint we will promote once the migration branch is merged.
+4. **Touch settings live under the new Settings screen** (Home → Settings). Orientation changes apply immediately, and the Calibration workflow saves touch bounds back into the config.
+5. **Capture validation details** in `docs/smoke_test_checklist_v2.md` (hardware used, commands run, observations) so the next developer can resume testing exactly where you stopped.
+
+### Freeing /dev/fb1 from the Desktop (TFTs)
+- If the Raspberry Pi Desktop is painting onto `/dev/fb1`, the framebuffer app won’t be visible. Use the helper script to disable the desktop on the TFT:
+  - `sudo ./scripts/disable_desktop_and_free_fb1.sh tft-only` (recommended for TFT-only)
+  - `sudo ./scripts/disable_desktop_and_free_fb1.sh hdmi` (keep desktop on HDMI, reserve fb1 for TFT)
+  - `sudo ./scripts/disable_desktop_and_free_fb1.sh restore` (re-enable desktop/lightdm and restore config backup)
+- Reboot after running the chosen command.
+
+### Agent / CLI Scratch Notes
+- Keep long-form context or “memory” notes in `.agent-notes/` (create it locally if it doesn’t exist). That directory is ignored by git so these files stay on your machine.
+- If a note graduates into actual project documentation, move it into `docs/` (or update an existing doc) and commit it like any other change. This keeps the repo history tidy while still giving agents a place for ephemeral context.
+
+## Theming (LCARS + Retro)
+- Themes live under `themes/` and can be chosen via `DFPLAYER_THEME=<name>` (omit `.json`).
+- Shipped samples: `lcars_default`, `lcars_rpi` (tobykurien palette), `lcars_ha` (Home Assistant LCARS palette).
+- Custom files follow the schema in `docs/LCARS_THEME_PLAN.md`.
+- **Features**:
+  - Automatic validation with type checking and safe numeric clamping
+  - Reference parsing in `accent_cycle` (e.g., `"bg"`, `"accents[0]"`)
+  - In-memory caching to reduce file I/O
+  - Font path validation with graceful fallbacks
+  - Comprehensive test coverage (43 unit tests)
+- **Usage**: `DFPLAYER_THEME=lcars_rpi python3 src/main_touch_v2.py`
 
 Profile selection
 
@@ -110,6 +142,41 @@ Using the UI
 	•	Buttons: Play/Prev/Next/Stop; slide the volume bar.
 
 Calibration is saved to ~/.touch_cal.txt.
+
+## Track Catalog
+
+The app can load track titles from a text file instead of showing generic "Track 001", "Track 002" placeholders.
+
+**File format** (one track per line):
+```
+# Comments start with #
+1|Welcome Theme
+2|Level 1 Music
+3 Boss Battle     # Space-separated also works
+4|Victory Fanfare
+```
+
+**Search locations** (checked in order):
+1. `$DFPLAYER_TRACK_CATALOG` environment variable
+2. `config/track_catalog.txt` (in this repo)
+3. `/boot/dfplayer_tracks.txt`
+
+If no catalog is found, the app will:
+1. Query the DFPlayer for file count (if available)
+2. Fall back to 30 generic placeholder tracks
+
+**To create your catalog:**
+```bash
+# Copy the example file
+cp config/track_catalog.example.txt config/track_catalog.txt
+
+# Edit it with your track numbers and titles
+nano config/track_catalog.txt
+
+# Track numbers must match your DFPlayer SD card:
+#   /mp3/0001.mp3 → Track 1
+#   /mp3/0002.mp3 → Track 2
+```
 
 Repo layout
 
@@ -168,8 +235,22 @@ The `v2` architecture provides a solid foundation for future development. As new
 *   **Simplify the Main Loop:** The `run` method in `dfplayer_fb_gui_v2.py` is the most complex part of the application. Future refactoring efforts should focus on simplifying this loop by further abstracting the event handling logic. For example, a dedicated `EventHandler` class could be created to process touch events and delegate them to the appropriate UI components.
 *   **Enhance UI Components:** If the UI is expected to grow in complexity, consider creating a more robust UI component system or evaluating a library like `pygame` (configured to use the framebuffer backend).
 
+### 4. Transition from `_vN` Files to Branch-Based Versioning
+
+The file-based versioning convention (keeping `*_v2.py`, `*_v3.py`, etc.) is useful while Phase 2 is still actively comparing the legacy touchscreen stack with the new Application/AppState code. Once `src/main_v3.py` and the ScreenManagerV2 UI are validated on hardware, freeze that implementation on `main` and archive older entrypoints on a `legacy/v1` branch.
+
+- Continue creating `_vN` siblings only when the legacy runtime still needs the previous file untouched (e.g., `main.py` for the existing systemd unit).
+- New features should be developed on Git branches (e.g., `feature/gesture-support`) and merged through PRs. Document each merge in `CHANGES_v2.md` so every iteration remains traceable.
+- During the cutover, tag the commit that finalizes `_vN` files and document the transition in `VERSIONING_GUIDELINES.md` so regressions can be bisected quickly.
+
 By following these recommendations, the project will be well-positioned for future growth and will remain a stable and maintainable codebase.
 
 License
 
 MIT (see LICENSE)
+- Tests (v2)
+
+- See `tests/README_v2.md` for the modular test suite covering selectors, display/input abstractions, UI helpers, the screen manager, and the touchscreen v2 launcher bootstrap.
+- Legacy tests for the monolithic `dfplayer_fb_gui.py` remain documented in `tests/README.md` and may require hardware packages (evdev) to pass on non-Pi systems.
+- Install once for local dev/tests: `pip install -e .` (uses `pyproject.toml`). After that, `python -m pytest -q tests/...` works out of the box, and GitHub Actions runs the same suite automatically on every push/PR.
+- If you prefer the classic flow, `pip install -r requirements.txt` installs the runtime deps (Pillow, pyserial, evdev) without the editable extras.

@@ -83,7 +83,9 @@ class TestTouchDeviceInitialization:
 
                         if hasattr(dfplayer_fb_gui, 'init_touch'):
                             result = dfplayer_fb_gui.init_touch()
-                            assert result is None or result is False
+                            # init_touch returns a 5-tuple: (touch, minx, maxx, miny, maxy)
+                            # On error, touch (first element) should be None
+                            assert isinstance(result, tuple) and result[0] is None
                 except SystemExit:
                     pytest.fail("Should not call sys.exit() - use logging instead")
                 except RuntimeError:
@@ -109,6 +111,8 @@ class TestTouchDeviceInitialization:
 
                     if hasattr(dfplayer_fb_gui, 'init_touch'):
                         result = dfplayer_fb_gui.init_touch()
-                        assert result is None or result is False
+                        # init_touch returns a 5-tuple: (touch, minx, maxx, miny, maxy)
+                        # On error, touch (first element) should be None
+                        assert isinstance(result, tuple) and result[0] is None
                 except SystemExit:
                     pytest.fail("Should not call sys.exit() - use logging instead")

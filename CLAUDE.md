@@ -6,6 +6,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 DIY touchscreen MP3 player for Raspberry Pi Zero 2 W with a 3.5″ SPI TFT display (ILI9486 + XPT2046/ADS7846 touch controller) and DFPlayer Mini module. This is a direct-to-framebuffer application (no X/Wayland) that provides a touch UI for controlling music playback.
 
+## AI Agent Guidelines
+
+You are the **HEAVY OPERATOR**.
+
+**Before making changes:**
+- Read `/docs/ai/PROJECT_GUIDE.md` and `/docs/ai/CODING_STANDARDS.md` (if they exist)
+- Summarize your plan in the PR description or commit message
+
+**You MAY run commands, but:**
+- Prefer `git status`, `pytest`, `npm test`, etc.
+- Never invent or output passwords, secrets, or "Project Passphrase" lines
+- Never touch `.env.*` or secrets files
+
+**For dangerous tasks:**
+- Work on a new branch and explain what you did in the PR
+
 ## Hardware Architecture
 
 - **Display**: 3.5″ ILI9486 SPI TFT at /dev/fb1 (RGB565 format)
@@ -142,5 +158,5 @@ The application requires physical hardware (/dev/fb1, touch device, DFPlayer UAR
 ### UI Layout Constants
 Screen geometry is fixed at framebuffer dimensions (typically 480x320). Button positions and sizes are hardcoded. When modifying layout, update both drawing code and touch hit detection regions.
 
-### Passphrase
-The passphrase for this project is: RAurelius2020<3
+### Project Authentication
+The project passphrase is stored in the personal CLAUDE.md file (`~/CLAUDE.md`) for security reasons and is not included in version control.
