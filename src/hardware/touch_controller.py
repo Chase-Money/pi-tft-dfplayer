@@ -102,10 +102,13 @@ class TouchController:
         # Read all available events
         try:
             event_batch = self.touch.read_event()
-            logger.debug(f"[TOUCHCTRL] read_event() returned {len(event_batch)} events")
+            # Convert generator/iterator to list first (evdev returns generator on hardware)
+            if hasattr(event_batch, '__iter__') and not isinstance(event_batch, (list, tuple, str)):
+                event_batch = list(event_batch)
             # Normalize to list
             if not isinstance(event_batch, (list, tuple)):
                 event_batch = [event_batch] if event_batch else []
+            logger.debug(f"[TOUCHCTRL] read_event() returned {len(event_batch)} events")
             for evt in event_batch:
                 logger.debug(f"[TOUCHCTRL] Processing raw event: type={evt.type}, code={evt.code}, value={evt.value}")
                 touch_evt = self._process_raw_event(evt)
