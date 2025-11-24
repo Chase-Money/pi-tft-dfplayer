@@ -79,7 +79,7 @@ class NowPlayingScreen(ScreenView):
             draw.text((margin, info_y), "State not available", font=fonts["medium"], fill=palette.danger)
             return
 
-        track = self.state.get_now_playing_track() or self.state.get_selected_track()
+        track = self.state.get_playing_track() or self.state.get_selected_track()
         playing = self.state.playback.playing
         volume = self.state.playback.volume
         self.slider.value = volume

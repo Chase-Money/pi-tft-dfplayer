@@ -86,8 +86,7 @@ class TrackBrowserScreen(ScreenView):
         # Update list state
         if self.state:
             self.list_widget.selected_index = self.state.playback.selected_track_index
-            max_scroll = max(0, len(self.state.tracks) - visible_rows)
-            self.list_widget.scroll = min(max(self.state.playback.track_scroll_pos, 0), max_scroll)
+            # Scroll position auto-managed by ListWidget - no need to restore from state
 
         # Draw list
         self.list_widget.draw(draw, self.list_rect, fonts["small"])
