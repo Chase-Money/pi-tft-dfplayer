@@ -70,8 +70,8 @@ class TouchController:
         else:
             # Defaults tuned for responsiveness on resistive panels
             self.tap_threshold_ms = 400
-            self.drag_threshold_px = 12
-            self.swipe_threshold_px = 48
+            self.drag_threshold_px = 25  # Increased from 12 to handle resistive panel jitter
+            self.swipe_threshold_px = 60  # Increased from 48 for clearer swipe detection
 
     def get_events(self, timeout: float = 0.0) -> List[TouchEvent]:
         """
