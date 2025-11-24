@@ -19,6 +19,7 @@ from ui.framework.events import UIEvent
 from ui.screens.home import HomeScreen
 from ui.screens.track_browser import TrackBrowserScreen
 from ui.screens.now_playing import NowPlayingScreen
+from ui.screens.settings import SettingsScreen
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +66,7 @@ class Application:
         self.screen_manager.register("home", HomeScreen)
         self.screen_manager.register("track_browser", TrackBrowserScreen)
         self.screen_manager.register("now_playing", NowPlayingScreen)
+        self.screen_manager.register("settings", SettingsScreen)
         self.screen_manager.push("home")
 
         self.image = Image.new("RGB", (self.framebuffer.width, self.framebuffer.height), (12, 16, 24))
