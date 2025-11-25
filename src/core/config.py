@@ -1,281 +1,365 @@
-"""Configuration management module.
+"""
+ConfigV2: canonical configuration manager for the v2 application stack.
 
-Handles JSON-based configuration persistence for application settings including:
-- Touch calibration and orientation
-- Volume settings
-- UI preferences
-- System paths
+Provides thread-safe loading and saving of user preferences and system state
+to ~/.dfplayer_config.json with atomic writes and validation.
 """
 
 import json
 import logging
 import os
-import threading
-from typing import Any, Dict, Optional, Tuple
+import tempfile
+from pathlib import Path
+from threading import RLock
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
 
-# 8 orientation combos we can cycle through
-ORIENTS = [
-    dict(SWAP_XY=False, FLIP_X=False, FLIP_Y=False),
-    dict(SWAP_XY=False, FLIP_X=True , FLIP_Y=False),
-    dict(SWAP_XY=False, FLIP_X=False, FLIP_Y=True ),
-    dict(SWAP_XY=False, FLIP_X=True , FLIP_Y=True ),
-    dict(SWAP_XY=True , FLIP_X=False, FLIP_Y=False),
-    dict(SWAP_XY=True , FLIP_X=True , FLIP_Y=False),
-    dict(SWAP_XY=True , FLIP_X=False, FLIP_Y=True ),
-    dict(SWAP_XY=True , FLIP_X=True , FLIP_Y=True ),
-]
-
 class Config:
-    """Centralized configuration manager.
+    """
+    Thread-safe configuration manager with atomic persistence.
 
-    Provides JSON-based persistence with atomic writes and default values.
-    Supports hierarchical configuration with environment variable overrides.
-
-    Attributes:
-        config_path: Path to configuration file
-        data: Configuration dictionary
+    Stores user preferences and application state including:
+    - Touch calibration parameters
+    - Touch orientation settings
+    - Volume level
+    - Last played track
+    - UI theme and preferences
     """
 
-    # Default configuration values
-    DEFAULTS = {
-        "touch": {
-            "orientation_index": 6,
-            "calibration": None,  # (minx, maxx, miny, maxy) or None
-            "thresholds": {
-                "tap_threshold_ms": 800,     # Max time for tap (ms) - tuned for resistive touchscreen
-                "drag_threshold_px": 80,     # Min pixels for drag - high threshold for noisy resistive touchscreen
-                "swipe_threshold_px": 120,   # Min pixels for swipe
-            },
+    DEFAULT_CONFIG_PATH = Path.home() / ".dfplayer_config.json"
+
+    DEFAULT_VALUES = {
+        "volume": 15,
+        "last_track": 1,
+        "touch_calibration": {
+            "min_x": 0,
+            "max_x": 4095,
+            "min_y": 0,
+            "max_y": 4095
         },
-        "audio": {
-            "volume": 18,
-            "last_backend": "dfplayer",  # "dfplayer" or "spotify"
-            "last_track": 1,  # Last played track number
+        "touch_orientation": {
+            "swap_xy": False,
+            "flip_x": False,
+            "flip_y": False
         },
-        "ui": {
-            "theme": "default",
-            "brightness": 100,
-            "auto_play": False,  # Auto-play on startup
+        "touch_orientation_index": 6,
+        "touch_thresholds": {
+            "tap_threshold_ms": 400,  # Max time for tap (ms)
+            "drag_threshold_px": 12,  # Min pixels for drag
+            "swipe_threshold_px": 48  # Min pixels for swipe
         },
+        "ui_theme": "default",
+        "screen_brightness": 100,
+        "auto_play": False,
         "paths": {
             "metadata": "/boot/dfplayer_metadata.json",
             "track_catalog": None,
             "artwork_root": None,
         },
-        "system": {
-            "auto_start": True,
-            "log_level": "INFO",
-        },
     }
 
-    def __init__(self, config_path=None):
-        """Initialize configuration manager.
+    def __init__(self, config_path: Optional[Path] = None):
+        """
+        Initialize configuration manager.
 
         Args:
             config_path: Path to config file (default: ~/.dfplayer_config.json)
         """
-        if config_path is None:
-            config_path = os.path.expanduser("~/.dfplayer_config.json")
+        self.config_path = config_path or self.DEFAULT_CONFIG_PATH
+        self._data: Dict[str, Any] = {}
+        self._lock = RLock()  # Reentrant lock for thread safety
+        self._loaded = False
 
-        self.config_path = config_path
-        self.data = self._load_or_create()
-
-    def _load_or_create(self) -> Dict[str, Any]:
-        """Load config from file or create with defaults.
+    def load(self) -> bool:
+        """
+        Load configuration from disk.
 
         Returns:
-            Configuration data dictionary
+            True if loaded successfully, False if using defaults
         """
-        if os.path.exists(self.config_path):
+        with self._lock:
             try:
-                with open(self.config_path, 'r', encoding='utf-8') as f:
-                    loaded = json.load(f)
+                if not self.config_path.exists():
+                    logger.info(f"Config file not found at {self.config_path}, using defaults")
+                    self._data = self.DEFAULT_VALUES.copy()
+                    self._loaded = True
+                    return False
 
-                # Merge with defaults (preserve user settings, add new defaults)
-                merged = self._deep_merge(self.DEFAULTS.copy(), loaded)
+                with open(self.config_path, 'r') as f:
+                    loaded_data = json.load(f)
+
+                # Validate loaded data
+                if not isinstance(loaded_data, dict):
+                    logger.error("Config file is not a valid JSON object, using defaults")
+                    self._data = self.DEFAULT_VALUES.copy()
+                    return False
+
+                # Merge with defaults (in case new keys were added)
+                self._data = self._merge_with_defaults(loaded_data)
+                # Ensure required defaults are present even if the file has empty dicts
+                for key, val in self.DEFAULT_VALUES.items():
+                    if key not in self._data or (isinstance(self._data[key], dict) and not self._data[key]):
+                        self._data[key] = val
+                self._loaded = True
                 logger.info(f"Configuration loaded from {self.config_path}")
-                return merged
+                return True
 
             except json.JSONDecodeError as e:
-                logger.error(f"Invalid JSON in config file: {e}")
-                logger.warning("Using default configuration")
-                # Backup corrupted config
+                logger.error(f"Config file is corrupted: {e}, using defaults")
+                self._data = self.DEFAULT_VALUES.copy()
+                self._loaded = True
+                # Backup corrupted file
                 self._backup_corrupted_config()
-                return self.DEFAULTS.copy()
+                return False
+
             except Exception as e:
-                logger.error(f"Error loading config: {e}")
-                return self.DEFAULTS.copy()
-        else:
-            logger.info("No config file found, using defaults")
-            return self.DEFAULTS.copy()
+                logger.error(f"Error loading config: {e}, using defaults")
+                self._data = self.DEFAULT_VALUES.copy()
+                self._loaded = True
+                return False
 
-    def _deep_merge(self, base: Dict[str, Any], overlay: Dict[str, Any]) -> Dict[str, Any]:
-        """Deep merge two dictionaries.
-
-        Args:
-            base: Base dictionary (defaults)
-            overlay: Overlay dictionary (user values)
+    def save(self) -> bool:
+        """
+        Save configuration to disk using atomic write.
 
         Returns:
-            Merged dictionary
+            True if saved successfully, False otherwise
         """
-        result = base.copy()
+        with self._lock:
+            try:
+                # Ensure config directory exists
+                self.config_path.parent.mkdir(parents=True, exist_ok=True)
 
-        for key, value in overlay.items():
-            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-                result[key] = self._deep_merge(result[key], value)
-            else:
-                result[key] = value
+                # Atomic write: write to temp file, then rename
+                with tempfile.NamedTemporaryFile(
+                    mode='w',
+                    dir=self.config_path.parent,
+                    delete=False,
+                    suffix='.tmp'
+                ) as tmp_file:
+                    json.dump(self._data, tmp_file, indent=2)
+                    tmp_path = tmp_file.name
 
-        return result
+                # Atomic rename
+                os.replace(tmp_path, self.config_path)
+                logger.info(f"Configuration saved to {self.config_path}")
+                return True
 
-    def get(self, key_path: str, default: Any = None) -> Any:
-        """Get configuration value by dot-separated path.
+            except Exception as e:
+                logger.error(f"Error saving config: {e}")
+                # Clean up temp file if it exists
+                try:
+                    if 'tmp_path' in locals():
+                        os.unlink(tmp_path)
+                except Exception:
+                    pass
+                return False
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """
+        Get a configuration value.
 
         Args:
-            key_path: Dot-separated key path (e.g., "touch.orientation_index")
+            key: Configuration key (supports dot notation for nested keys)
             default: Default value if key not found
 
         Returns:
             Configuration value or default
         """
-        if key_path == "touch_thresholds":
-            return self.get_touch_thresholds()
-        keys = key_path.split('.')
-        value = self.data
+        with self._lock:
+            # Lazy load if not loaded yet
+            if not self._loaded:
+                self.load()
 
-        for key in keys:
-            if isinstance(value, dict) and key in value:
-                value = value[key]
-            else:
-                return default
+            # Support dot notation (e.g., "touch_calibration.min_x")
+            keys = key.split('.')
+            value = self._data
 
-        return value
+            # Special-case touch_thresholds to guarantee defaults
+            if key == "touch_thresholds":
+                val = self._data.get("touch_thresholds")
+                if not isinstance(val, dict) or not val:
+                    return self.DEFAULT_VALUES["touch_thresholds"].copy()
+                merged = self.DEFAULT_VALUES["touch_thresholds"].copy()
+                merged.update(val)
+                return merged
 
-    def set(self, key_path: str, value: Any) -> None:
-        """Set configuration value by dot-separated path.
+            for k in keys:
+                if isinstance(value, dict) and k in value:
+                    value = value[k]
+                else:
+                    value = default
+                    break
+
+            if key == "touch_thresholds" and (not value or not isinstance(value, dict)):
+                return self.DEFAULT_VALUES["touch_thresholds"]
+
+            return value
+
+    def set(self, key: str, value: Any) -> None:
+        """
+        Set a configuration value.
 
         Args:
-            key_path: Dot-separated key path (e.g., "touch.orientation_index")
+            key: Configuration key (supports dot notation for nested keys)
             value: Value to set
         """
-        keys = key_path.split('.')
-        data = self.data
+        with self._lock:
+            # Lazy load if not loaded yet
+            if not self._loaded:
+                self.load()
 
-        # Navigate to parent
-        for key in keys[:-1]:
-            if key not in data:
-                data[key] = {}
-            data = data[key]
+            # Support dot notation (e.g., "touch_calibration.min_x")
+            keys = key.split('.')
 
-        # Set value
-        data[keys[-1]] = value
-        logger.debug(f"Config set: {key_path} = {value}")
+            if len(keys) == 1:
+                self._data[key] = value
+            else:
+                # Navigate to nested dict
+                current = self._data
+                for k in keys[:-1]:
+                    if k not in current:
+                        current[k] = {}
+                    current = current[k]
+                current[keys[-1]] = value
 
-    def save(self) -> bool:
-        """Save configuration to file with atomic write.
+    def get_all(self) -> Dict[str, Any]:
+        """
+        Get all configuration data.
 
         Returns:
-            True if successful, False otherwise
+            Copy of configuration dictionary
         """
-        try:
-            # Ensure directory exists
-            directory = os.path.dirname(self.config_path)
-            if directory and not os.path.exists(directory):
-                os.makedirs(directory, exist_ok=True)
+        with self._lock:
+            if not self._loaded:
+                self.load()
+            return self._data.copy()
 
-            # Atomic write via temporary file
-            tmp_path = self.config_path + ".tmp"
-            with open(tmp_path, 'w', encoding='utf-8') as f:
-                json.dump(self.data, f, indent=2)
+    def reset(self) -> None:
+        """Reset configuration to default values."""
+        with self._lock:
+            self._data = self.DEFAULT_VALUES.copy()
+            logger.info("Configuration reset to defaults")
 
-            os.replace(tmp_path, self.config_path)
-            logger.info(f"Configuration saved to {self.config_path}")
-            return True
-
-        except Exception as e:
-            logger.error(f"Failed to save configuration: {e}")
-            return False
-
-    def reset(self, section=None):
-        """Reset configuration to defaults.
+    @staticmethod
+    def _deep_merge(base: Dict, override: Dict) -> Dict:
+        """
+        Recursively merge override into base.
 
         Args:
-            section: Section to reset (None = reset all)
+            base: Base dictionary
+            override: Override dictionary
+
+        Returns:
+            Merged dictionary
         """
-        if section is None:
-            self.data = self.DEFAULTS.copy()
-            logger.info("Configuration reset to defaults")
-        elif section in self.DEFAULTS:
-            self.data[section] = self.DEFAULTS[section].copy()
-            logger.info(f"Configuration section '{section}' reset to defaults")
-        else:
-            logger.warning(f"Unknown configuration section: {section}")
+        merged = base.copy()
+        for key, value in override.items():
+            if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+                merged[key] = Config._deep_merge(merged[key], value)
+            else:
+                merged[key] = value
+        return merged
 
-    # Convenience methods for common operations
+    def _merge_with_defaults(self, loaded_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Merge loaded data with defaults.
 
-    def get_touch_orientation(self) -> int:
-        """Get touch orientation index."""
-        return self.get("touch.orientation_index", 6)
+        Args:
+            loaded_data: Data loaded from file
 
-    def set_touch_orientation(self, index: int) -> None:
-        """Set touch orientation index."""
-        self.set("touch.orientation_index", int(index))
+        Returns:
+            Merged configuration
+        """
+        result = self.DEFAULT_VALUES.copy()
+        return self._deep_merge(result, loaded_data)
 
-    def get_touch_calibration(self) -> Optional[Tuple[int, int, int, int]]:
-        """Get touch calibration tuple or None."""
-        cal = self.get("touch.calibration")
-        if isinstance(cal, (list, tuple)) and len(cal) == 4:
-            return tuple(int(v) for v in cal)
-        return None
+    def _backup_corrupted_config(self) -> None:
+        """Create backup of corrupted config file."""
+        try:
+            if self.config_path.exists():
+                backup_path = self.config_path.with_suffix('.json.corrupted')
+                self.config_path.rename(backup_path)
+                logger.info(f"Corrupted config backed up to {backup_path}")
+        except Exception as e:
+            logger.error(f"Failed to backup corrupted config: {e}")
 
-    def set_touch_calibration(self, minx: int, maxx: int, miny: int, maxy: int) -> None:
-        """Set touch calibration values."""
-        self.set("touch.calibration", [int(minx), int(maxx), int(miny), int(maxy)])
-
-    def clear_touch_calibration(self) -> None:
-        """Clear touch calibration."""
-        self.set("touch.calibration", None)
+    # Convenience methods for common settings
 
     def get_volume(self) -> int:
-        """Get volume level."""
-        return self.get("audio.volume", 18)
+        """Get volume level (0-30)."""
+        return int(self.get("volume", 15))
 
     def set_volume(self, volume: int) -> None:
-        """Set volume level."""
-        volume = max(0, min(30, int(volume)))
-        self.set("audio.volume", volume)
+        """Set volume level (0-30)."""
+        self.set("volume", max(0, min(30, volume)))
+
+    def get_touch_calibration(self) -> Dict[str, int]:
+        """Get touch calibration parameters."""
+        return self.get("touch_calibration", self.DEFAULT_VALUES["touch_calibration"])
+
+    def set_touch_calibration(self, min_x: int, max_x: int, min_y: int, max_y: int) -> None:
+        """Set touch calibration parameters."""
+        self.set("touch_calibration", {
+            "min_x": min_x,
+            "max_x": max_x,
+            "min_y": min_y,
+            "max_y": max_y
+        })
+
+    def get_touch_orientation(self) -> Dict[str, bool]:
+        """Get touch orientation settings."""
+        return self.get("touch_orientation", self.DEFAULT_VALUES["touch_orientation"])
+
+    def set_touch_orientation(self, swap_xy: bool = False, flip_x: bool = False, flip_y: bool = False) -> None:
+        """Set touch orientation settings."""
+        self.set("touch_orientation", {
+            "swap_xy": swap_xy,
+            "flip_x": flip_x,
+            "flip_y": flip_y
+        })
+
+    def get_touch_orientation_index(self) -> int:
+        """Get touch orientation index (legacy compatibility)."""
+        return int(self.get("touch_orientation_index", self.DEFAULT_VALUES.get("touch_orientation_index", 0)))
+
+    def set_touch_orientation_index(self, index: int) -> None:
+        """Set touch orientation index (legacy compatibility)."""
+        self.set("touch_orientation_index", int(index))
 
     def get_metadata_path(self) -> Optional[str]:
-        """Get metadata file path."""
-        # Check environment variable first
+        """Get metadata file path with env override."""
         env_path = os.environ.get("DFPLAYER_METADATA")
         if env_path:
             return env_path
-        return self.get("paths.metadata", "/boot/dfplayer_metadata.json")
+        return self.get("paths", {}).get("metadata", self.DEFAULT_VALUES["paths"]["metadata"])
 
     def get_artwork_root(self) -> Optional[str]:
-        """Get artwork root directory."""
-        # Check environment variable first
+        """Get artwork root directory with env override."""
         env_path = os.environ.get("DFPLAYER_ART_ROOT")
         if env_path:
             return env_path
-        return self.get("paths.artwork_root")
+        return self.get("paths", {}).get("artwork_root", None)
 
     def get_track_catalog_path(self) -> Optional[str]:
-        """Get track catalog file path."""
-        # Check environment variable first
+        """Get track catalog file path with env override."""
         env_path = os.environ.get("DFPLAYER_TRACK_CATALOG")
         if env_path:
             return env_path
-        return self.get("paths.track_catalog")
+        return self.get("paths", {}).get("track_catalog", None)
 
     def get_touch_thresholds(self) -> Dict[str, int]:
         """Get touch gesture threshold parameters."""
-        return self.get("touch.thresholds", self.DEFAULTS["touch"]["thresholds"])
+        thresholds = self.get("touch_thresholds", self.DEFAULT_VALUES["touch_thresholds"])
+        # Backfill missing keys or empty dicts
+        if not thresholds:
+            thresholds = self.DEFAULT_VALUES["touch_thresholds"].copy()
+        else:
+            for k, v in self.DEFAULT_VALUES["touch_thresholds"].items():
+                thresholds.setdefault(k, v)
+        return thresholds
 
     def set_touch_thresholds(
         self,
@@ -284,7 +368,7 @@ class Config:
         swipe_threshold_px: int = 120
     ) -> None:
         """Set touch gesture threshold parameters."""
-        self.set("touch.thresholds", {
+        self.set("touch_thresholds", {
             "tap_threshold_ms": max(0, tap_threshold_ms),
             "drag_threshold_px": max(0, drag_threshold_px),
             "swipe_threshold_px": max(0, swipe_threshold_px)
@@ -292,57 +376,26 @@ class Config:
 
     def get_last_track(self) -> int:
         """Get last played track number."""
-        return int(self.get("audio.last_track", 1))
+        return int(self.get("last_track", 1))
 
     def set_last_track(self, track_number: int) -> None:
         """Set last played track number."""
-        self.set("audio.last_track", max(1, track_number))
-
-    def get_auto_play(self) -> bool:
-        """Get auto-play on startup setting."""
-        return bool(self.get("ui.auto_play", False))
-
-    def set_auto_play(self, enabled: bool) -> None:
-        """Set auto-play on startup setting."""
-        self.set("ui.auto_play", bool(enabled))
-
-    def _backup_corrupted_config(self) -> None:
-        """Create backup of corrupted config file."""
-        try:
-            if os.path.exists(self.config_path):
-                backup_path = self.config_path + ".corrupted"
-                # Rename existing config to .corrupted
-                if os.path.exists(backup_path):
-                    # If backup already exists, append timestamp
-                    import time
-                    timestamp = int(time.time())
-                    backup_path = f"{self.config_path}.corrupted.{timestamp}"
-                os.rename(self.config_path, backup_path)
-                logger.info(f"Corrupted config backed up to {backup_path}")
-        except Exception as e:
-            logger.error(f"Failed to backup corrupted config: {e}")
+        self.set("last_track", max(1, track_number))
 
 
-# Global configuration instance
-_config_instance = None
-_config_lock = threading.Lock()
+# Singleton instance for global access
+_config_instance: Optional[Config] = None
 
 
-def get_config(config_path: Optional[str] = None) -> Config:
-    """Get global configuration instance.
-
-    Args:
-        config_path: Path to config file (only used on first call)
+def get_config() -> Config:
+    """
+    Get the global configuration instance.
 
     Returns:
-        Global configuration instance
+        Config singleton instance
     """
     global _config_instance
-
     if _config_instance is None:
-        with _config_lock:
-            # Double-check locking pattern
-            if _config_instance is None:
-                _config_instance = Config(config_path)
-
+        _config_instance = Config()
+        _config_instance.load()
     return _config_instance

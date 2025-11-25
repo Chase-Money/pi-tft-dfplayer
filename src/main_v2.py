@@ -29,7 +29,7 @@ from core.state import get_state
 from core.events import get_event_bus
 
 try:
-    from core.profile_select_v3 import detect_profile, select_hardware, import_by_path  # type: ignore
+    from core.hardware_profile import detect_profile, select_hardware, import_by_path  # type: ignore
 except Exception:  # pragma: no cover - fallback if v3 not available
     from core.profile_select_v2 import detect_profile, select_hardware, import_by_path  # type: ignore
 from utils.metadata import load_metadata, ArtworkCache

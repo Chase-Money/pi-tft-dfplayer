@@ -1,7 +1,7 @@
 import builtins
 import os
 
-from src.core.profile_select_v3 import detect_profile, select_hardware
+from src.core.hardware_profile import detect_profile, select_hardware
 
 
 def test_detect_env_override(monkeypatch):
@@ -81,4 +81,3 @@ def test_select_hardware_paths():
     d, i = select_hardware('ili9486_touch')
     assert d.endswith('hardware.framebuffer.Framebuffer')
     assert i.endswith('hardware.touch.TouchInput')
-

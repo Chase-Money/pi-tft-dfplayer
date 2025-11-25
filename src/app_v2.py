@@ -5,9 +5,7 @@ import atexit
 import logging
 from typing import Dict, List, Optional, Tuple
 
-from PIL import Image, ImageDraw, ImageFont
-
-from core.config_v2 import Config as ConfigV2
+from core.config import Config
 from core.state import ApplicationState, get_state
 from utils.track_catalog import load_track_catalog
 from utils.metadata import load_metadata
@@ -16,10 +14,12 @@ from hardware.touch_controller import TouchController
 from backends.dfplayer_v2 import DFPlayerBackend
 from ui.framework.manager import ScreenManagerV2
 from ui.framework.events import UIEvent
+from ui.renderer import FramebufferRendererV2
 from ui.screens.home import HomeScreen
 from ui.screens.track_browser import TrackBrowserScreen
 from ui.screens.now_playing import NowPlayingScreen
 from ui.screens.settings import SettingsScreen
+from ui.screens.calibration import CalibrationScreen
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ class Application:
     """Unified touchscreen application built on the ScreenManagerV2 stack."""
 
     def __init__(self, config=None) -> None:
-        self.config: ConfigV2 = config or ConfigV2()
+        self.config: Config = config or Config()
         self.config.load()
 
         try:
@@ -42,7 +42,6 @@ class Application:
         except Exception as exc:
             logger.error("Failed to initialize touch input: %s", exc)
             self.touch_controller = None
-        self.fonts = self._load_fonts()
 
         self.state = get_state()
         self.backend = DFPlayerBackend()
@@ -61,40 +60,21 @@ class Application:
             "backend": self.backend,
             "config": self.config,
             "app": self,
+            "renderer": None,
         }
         self.screen_manager = ScreenManagerV2(services)
         self.screen_manager.register("home", HomeScreen)
         self.screen_manager.register("track_browser", TrackBrowserScreen)
         self.screen_manager.register("now_playing", NowPlayingScreen)
         self.screen_manager.register("settings", SettingsScreen)
+        self.screen_manager.register("calibration", CalibrationScreen)
         self.screen_manager.push("home")
 
-        self.image = Image.new("RGB", (self.framebuffer.width, self.framebuffer.height), (12, 16, 24))
-        self.draw = ImageDraw.Draw(self.image)
+        self.renderer = FramebufferRendererV2(self.framebuffer, self.screen_manager)
+        self.screen_manager.services["renderer"] = self.renderer
         self.running = True
 
         atexit.register(self.cleanup)
-
-    # ------------------------------------------------------------------
-    # Initialization helpers
-    def _configure_touch(self) -> None:
-        """Apply orientation/calibration settings for compatibility (legacy path)."""
-        # TouchController handles orientation/calibration internally via config; no-op retained for compatibility.
-        return
-
-    def _load_fonts(self) -> Dict[str, ImageFont.ImageFont]:
-        fonts = {
-            "large": ImageFont.load_default(),
-            "medium": ImageFont.load_default(),
-            "small": ImageFont.load_default(),
-        }
-        try:
-            fonts["large"] = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 44)
-            fonts["medium"] = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 24)
-            fonts["small"] = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 18)
-        except Exception as exc:
-            logger.warning("Falling back to default fonts: %s", exc)
-        return fonts
 
     def _load_tracks_and_metadata(self) -> None:
         catalog = load_track_catalog(self.config.get_track_catalog_path())
@@ -131,8 +111,7 @@ class Application:
     # Main loop
     def run(self) -> None:
         logger.info("Starting v2 Application loop")
-        self.render()
-        self.framebuffer.push(self.image)
+        self.renderer.render_and_present()
 
         if not self.touch_controller or not getattr(self.touch_controller, "available", False):
             logger.warning("Touch input unavailable; rendered one frame")
@@ -148,8 +127,7 @@ class Application:
                     refreshed = True
 
             if refreshed:
-                self.render()
-                self.framebuffer.push(self.image)
+                self.renderer.render_and_present()
 
     def _touch_to_ui_event(self, touch_event) -> Optional[UIEvent]:
         event_type = getattr(touch_event, "type", None)
@@ -216,20 +194,6 @@ class Application:
             logger.warning(f"Event drain limit reached ({max_events} events), some events may be pending")
 
         return refreshed
-
-    # ------------------------------------------------------------------
-    def render(self) -> None:
-        # Calculate scale factor based on screen dimensions (reference: 480x320)
-        scale = min(self.framebuffer.width / 480, self.framebuffer.height / 320)
-
-        context = {
-            "image": self.image,
-            "draw": self.draw,
-            "fonts": self.fonts,
-            "state": self.state,
-            "scale": scale,
-        }
-        self.screen_manager.render(context)
 
     def get_status(self) -> Optional[Tuple[str, str]]:
         """Return optional status banner (message, level) for UI display."""

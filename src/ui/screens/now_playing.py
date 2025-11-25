@@ -137,7 +137,7 @@ class NowPlayingScreen(ScreenView):
             self.state.pause_playback()
         else:
             # If a track is selected but paused, resume it.
-            if self.state.get_now_playing_track() is not None:
+            if self.state.get_playing_track() is not None:
                 self.backend.resume()
                 self.state.start_playback()
             # Otherwise, play the newly selected track.
