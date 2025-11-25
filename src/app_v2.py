@@ -6,7 +6,7 @@ import logging
 from typing import Dict, List, Optional, Tuple
 
 from core.config import Config
-from core.state import ApplicationState, get_state
+from core.state import get_state
 from utils.track_catalog import load_track_catalog
 from utils.metadata import load_metadata
 from hardware.framebuffer import Framebuffer
@@ -39,6 +39,20 @@ class Application:
 
         try:
             self.touch_controller = TouchController(config=self.config)
+            # Load and apply calibration and orientation from config
+            if self.touch_controller:
+                cal = self.config.get_touch_calibration()
+                self.touch_controller.set_calibration(
+                    cal["min_x"], cal["max_x"], cal["min_y"], cal["max_y"]
+                )
+                orient = self.config.get_touch_orientation()
+                self.touch_controller.set_orientation(
+                    swap_xy=orient["swap_xy"],
+                    flip_x=orient["flip_x"],
+                    flip_y=orient["flip_y"]
+                )
+                logger.info(f"Touch calibration applied: {cal}")
+                logger.info(f"Touch orientation applied: {orient}")
         except Exception as exc:
             logger.error("Failed to initialize touch input: %s", exc)
             self.touch_controller = None
@@ -136,17 +150,22 @@ class Application:
         dx = getattr(touch_event, "dx", 0)
         dy = getattr(touch_event, "dy", 0)
         direction = getattr(touch_event, "direction", None)
+        raw_x = getattr(touch_event, "raw_x", None)
+        raw_y = getattr(touch_event, "raw_y", None)
+
+        # Include raw coordinates for calibration screen
+        raw = (raw_x, raw_y) if raw_x is not None and raw_y is not None else None
 
         if event_type == "tap":
-            return UIEvent("tap", {"pos": (x, y)})
+            return UIEvent("tap", {"pos": (x, y), "raw": raw})
         if event_type == "drag":
-            return UIEvent("drag", {"pos": (x, y), "dx": dx, "dy": dy})
+            return UIEvent("drag", {"pos": (x, y), "dx": dx, "dy": dy, "raw": raw})
         if event_type == "swipe":
-            return UIEvent("swipe", {"direction": direction, "delta": max(abs(dx), abs(dy))})
+            return UIEvent("swipe", {"direction": direction, "delta": max(abs(dx), abs(dy)), "raw": raw})
         if event_type == "press":
-            return UIEvent("press", {"pos": (x, y)})
+            return UIEvent("press", {"pos": (x, y), "raw": raw})
         if event_type == "release":
-            return UIEvent("release", {"pos": (x, y)})
+            return UIEvent("release", {"pos": (x, y), "raw": raw})
         return None
 
     def _drain_backend_events(self) -> bool:
@@ -200,6 +219,41 @@ class Application:
         # Future: Return status messages for system events
         # e.g., ("Low battery", "warning") or ("Track loaded", "info")
         return None
+
+    def set_status(self, message: str, level: str = "info", timeout: int = 3) -> None:
+        """Set temporary status message for UI display."""
+        # TODO: Implement status message queue with timeout
+        logger.info(f"Status [{level}]: {message}")
+
+    def get_touch_driver_bounds(self) -> Optional[Tuple[int, int, int, int]]:
+        """Get raw touch driver bounds (min_x, max_x, min_y, max_y)."""
+        if not self.touch_controller or not self.touch_controller.touch:
+            return None
+        return (
+            self.touch_controller.touch.min_x,
+            self.touch_controller.touch.max_x,
+            self.touch_controller.touch.min_y,
+            self.touch_controller.touch.max_y,
+        )
+
+    def get_touch_orientation(self) -> dict:
+        """Get current touch orientation settings."""
+        if not self.touch_controller or not self.touch_controller.touch:
+            return {"SWAP_XY": False, "FLIP_X": False, "FLIP_Y": False}
+        return self.touch_controller.touch.orientation
+
+    def set_touch_calibration(self, bounds: Tuple[int, int, int, int]) -> None:
+        """Set and save touch calibration bounds."""
+        min_x, max_x, min_y, max_y = bounds
+        logger.info(f"Setting touch calibration: ({min_x}, {max_x}, {min_y}, {max_y})")
+
+        # Apply to touch controller
+        if self.touch_controller:
+            self.touch_controller.set_calibration(min_x, max_x, min_y, max_y)
+
+        # Save to config
+        self.config.set_touch_calibration(min_x, max_x, min_y, max_y)
+        self.config.save()
 
     def cleanup(self) -> None:
         self.running = False
