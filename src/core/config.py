@@ -5,6 +5,7 @@ Provides thread-safe loading and saving of user preferences and system state
 to ~/.dfplayer_config.json with atomic writes and validation.
 """
 
+import copy
 import json
 import logging
 import os
@@ -83,7 +84,7 @@ class Config:
             try:
                 if not self.config_path.exists():
                     logger.info(f"Config file not found at {self.config_path}, using defaults")
-                    self._data = self.DEFAULT_VALUES.copy()
+                    self._data = copy.deepcopy(self.DEFAULT_VALUES)
                     self._loaded = True
                     return False
 
@@ -108,7 +109,7 @@ class Config:
 
             except json.JSONDecodeError as e:
                 logger.error(f"Config file is corrupted: {e}, using defaults")
-                self._data = self.DEFAULT_VALUES.copy()
+                self._data = copy.deepcopy(self.DEFAULT_VALUES)
                 self._loaded = True
                 # Backup corrupted file
                 self._backup_corrupted_config()
@@ -116,7 +117,7 @@ class Config:
 
             except Exception as e:
                 logger.error(f"Error loading config: {e}, using defaults")
-                self._data = self.DEFAULT_VALUES.copy()
+                self._data = copy.deepcopy(self.DEFAULT_VALUES)
                 self._loaded = True
                 return False
 
@@ -240,7 +241,7 @@ class Config:
     def reset(self) -> None:
         """Reset configuration to default values."""
         with self._lock:
-            self._data = self.DEFAULT_VALUES.copy()
+            self._data = copy.deepcopy(self.DEFAULT_VALUES)
             logger.info("Configuration reset to defaults")
 
     @staticmethod
@@ -273,7 +274,7 @@ class Config:
         Returns:
             Merged configuration
         """
-        result = self.DEFAULT_VALUES.copy()
+        result = copy.deepcopy(self.DEFAULT_VALUES)
         return self._deep_merge(result, loaded_data)
 
     def _backup_corrupted_config(self) -> None:
