@@ -119,17 +119,6 @@ class CalibrationScreen(ScreenView):
         app.set_touch_calibration((left_x, right_x, top_y, bottom_y))
         self.manager.pop()
 
-    def _invert_orientation(self, raw: Tuple[int, int], orient: dict, bounds: Tuple[int, int, int, int]) -> Tuple[int, int]:
-        min_x, max_x, min_y, max_y = bounds
-        x, y = raw
-        if orient.get("SWAP_XY"):
-            x, y = y, x
-        if orient.get("FLIP_X"):
-            x = (min_x + max_x) - x
-        if orient.get("FLIP_Y"):
-            y = (min_y + max_y) - y
-        return x, y
-
     def _app(self):
         return self.services.get("app") if self.services else None
 

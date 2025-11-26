@@ -221,8 +221,12 @@ class Application:
         return None
 
     def set_status(self, message: str, level: str = "info", timeout: int = 3) -> None:
-        """Set temporary status message for UI display."""
-        # TODO: Implement status message queue with timeout
+        """
+        Set temporary status message for UI display.
+
+        Currently logs the status message. Future enhancement: implement
+        a status message queue with timeout for on-screen notifications.
+        """
         logger.info(f"Status [{level}]: {message}")
 
     def get_touch_driver_bounds(self) -> Optional[Tuple[int, int, int, int]]:
