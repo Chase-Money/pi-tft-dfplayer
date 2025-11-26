@@ -12,6 +12,7 @@ from ..framework.widgets import ButtonWidget
 from ..framework.events import UIEvent
 from ..views import draw_status_banner
 from ..theme_palette import get_palette
+from ..framework.debug import debug_tap_logging_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -52,21 +53,25 @@ class HomeScreen(ScreenView):
 
         # Create buttons only once (on first render)
         if not self._buttons_created:
+            dbg = debug_tap_logging_enabled()
             self.buttons = [
                 ButtonWidget(
                     (margin, start_y, button_width, button_height),
                     "Browse Tracks",
-                    lambda: self.manager.push("track_browser")
+                    lambda: self.manager.push("track_browser"),
+                    debug_log=dbg,
                 ),
                 ButtonWidget(
                     (margin, start_y + button_height + button_spacing, button_width, button_height),
                     "Now Playing",
-                    lambda: self.manager.push("now_playing")
+                    lambda: self.manager.push("now_playing"),
+                    debug_log=dbg,
                 ),
                 ButtonWidget(
                     (margin, start_y + 2 * (button_height + button_spacing), button_width, button_height),
                     "Settings",
-                    lambda: self.manager.push("settings")
+                    lambda: self.manager.push("settings"),
+                    debug_log=dbg,
                 ),
             ]
             self._buttons_created = True

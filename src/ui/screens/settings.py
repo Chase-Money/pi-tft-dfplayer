@@ -47,9 +47,10 @@ class SettingsScreen(ScreenView):
             orient_y = max(32, int(80 * scale))
             cal_y = orient_y + button_h + max(12, int(20 * scale))
 
-            self.back_button = ButtonWidget((margin, small_margin, back_w, max(16, int(40 * scale))), "Back", self.manager.pop)
-            self.orientation_button = ButtonWidget((margin, orient_y, button_w, button_h), self._orientation_label, self._cycle_orientation)
-            self.cal_button = ButtonWidget((margin, cal_y, button_w, button_h), "Calibrate Touch", self._open_calibration)
+            dbg = debug_tap_logging_enabled()
+            self.back_button = ButtonWidget((margin, small_margin, back_w, max(16, int(40 * scale))), "Back", self.manager.pop, debug_log=dbg)
+            self.orientation_button = ButtonWidget((margin, orient_y, button_w, button_h), self._orientation_label, self._cycle_orientation, debug_log=dbg)
+            self.cal_button = ButtonWidget((margin, cal_y, button_w, button_h), "Calibrate Touch", self._open_calibration, debug_log=dbg)
             self._last_resolution = current_res
 
         # Draw status banner

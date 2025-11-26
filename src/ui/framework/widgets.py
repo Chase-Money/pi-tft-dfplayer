@@ -23,6 +23,7 @@ class ButtonWidget:
         fill=(80, 110, 185),
         text_color=(255, 255, 255),
         radius: int = 16,
+        debug_log: bool = False,
     ) -> None:
         self.rect = rect
         self.label = label
@@ -31,6 +32,7 @@ class ButtonWidget:
         self.text_color = text_color
         self.radius = radius
         self._flash_until = 0.0
+        self._debug_log = debug_log
 
     def draw(self, draw: ImageDraw.ImageDraw, font) -> None:
         x, y, w, h = self.rect
@@ -46,6 +48,8 @@ class ButtonWidget:
         bbox = draw.textbbox((0, 0), label, font=font)
         tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
         draw.text((x + (w - tw) // 2, y + (h - th) // 2), label, font=font, fill=self.text_color)
+        if self._debug_log:
+            logger.debug(f"[BTN] rect={self.rect} label={label}")
 
     def handle_event(self, event: UIEvent) -> bool:
         if event.type != "tap":
@@ -54,6 +58,8 @@ class ButtonWidget:
         if not pos:
             return False
         if self._contains(pos, expand=4):
+            if self._debug_log:
+                logger.debug(f"[BTN] hit label={self.label if isinstance(self.label, str) else self.label()} pos={pos} rect={self.rect}")
             self.on_press()
             self._flash_until = time.monotonic() + 0.15
             return True
