@@ -141,8 +141,11 @@ class Application:
                     refreshed = True
 
             if refreshed:
+                # Get dirty rect hints from screen if available (for partial updates)
+                # Defaults to None for full screen update if screen doesn't provide hints
                 dirty = getattr(self.screen_manager.current, "last_dirty", None)
-                self.renderer.render(); self.renderer.present(dirty_rects=dirty)
+                self.renderer.render()
+                self.renderer.present(dirty_rects=dirty)
 
     def _touch_to_ui_event(self, touch_event) -> Optional[UIEvent]:
         event_type = getattr(touch_event, "type", None)
@@ -197,9 +200,13 @@ class Application:
             if etype == "track_finished":
                 track = self.state.advance_track(1)
                 if track:
-                    self.backend.play_track(track.number)
-                    self.state.start_playback(self.state.playback.selected_track_index)
-                    refreshed = True
+                    try:
+                        self.backend.play_track(track.number)
+                        self.state.start_playback(self.state.playback.selected_track_index)
+                        refreshed = True
+                    except Exception as exc:
+                        logger.error(f"Failed to play next track {track.number}: {exc}")
+                        self.set_status(f"Playback error: {exc}", "error", 5)
             elif etype == "track_started":
                 number = event.get("track")
                 idx = self.state.get_index_by_number(number) if number is not None else None
