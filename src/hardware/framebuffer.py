@@ -52,6 +52,34 @@ class Framebuffer:
         # Use memoryview for zero-copy write with pre-allocated buffer (310x faster!)
         self.mm.write(memoryview(self._rgb888_to_rgb565le(img.convert("RGB"))))
 
+    def push_partial(self, img, rect):
+        """
+        Push only a rectangular region to the framebuffer.
+
+        Args:
+            img: PIL Image matching framebuffer size or larger.
+            rect: (x, y, w, h) rectangle in framebuffer coords.
+        """
+        if img.size != (self.width, self.height):
+            img = img.resize((self.width, self.height))
+        x, y, w, h = rect
+        x2, y2 = x + w, y + h
+        # Clip to framebuffer bounds
+        x, y = max(0, x), max(0, y)
+        x2, y2 = min(self.width, x2), min(self.height, y2)
+        if x2 <= x or y2 <= y:
+            return
+        region = img.crop((x, y, x2, y2)).convert("RGB")
+        buf = self._rgb888_to_rgb565le(region)
+        # Write row by row into mm at correct offset
+        row_bytes = (x2 - x) * 2
+        for row in range(y, y2):
+            offset = (row * self.width + x) * 2
+            start = (row - y) * (x2 - x)
+            end = start + (x2 - x)
+            self.mm.seek(offset)
+            self.mm.write(memoryview(buf[start:end].tobytes()))
+
     def close(self):
         """Close the framebuffer resources."""
         self.mm.close()

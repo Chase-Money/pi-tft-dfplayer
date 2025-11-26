@@ -1,1 +1,1 @@
-2025-11-24 | feature/framework-migration | Touch hardening (thresholds, debounce, hitbox expansion); legacy test stubs restored; optional tap/hitbox debug logging flag added | pytest -q (subset; full run pending) | Start hardware validation for tap accuracy/back button.
+2025-11-24 | feature/framework-migration | Added partial push plumbing (push_partial) and initial dirty-rect plumbing in renderer/screens | pytest -q (quick) pending | Next: refine dirty rect collection & full test run.

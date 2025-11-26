@@ -88,7 +88,9 @@ class ScreenManagerV2:
     def render(self, context: dict) -> None:
         screen = self.current
         if screen:
-            screen.render(context)
+            # Let the screen render; if it returns dirty rects, propagate them
+            dirty = screen.render(context)
+            context["dirty_rects"] = dirty
 
     # Internal -------------------------------------------------------
     def _instantiate(self, name: str) -> ScreenView:

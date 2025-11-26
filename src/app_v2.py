@@ -141,7 +141,8 @@ class Application:
                     refreshed = True
 
             if refreshed:
-                self.renderer.render_and_present()
+                dirty = getattr(self.screen_manager.current, "last_dirty", None)
+                self.renderer.render_and_present(dirty_rects=dirty)
 
     def _touch_to_ui_event(self, touch_event) -> Optional[UIEvent]:
         event_type = getattr(touch_event, "type", None)
@@ -216,8 +217,6 @@ class Application:
 
     def get_status(self) -> Optional[Tuple[str, str]]:
         """Return optional status banner (message, level) for UI display."""
-        # Future: Return status messages for system events
-        # e.g., ("Low battery", "warning") or ("Track loaded", "info")
         return None
 
     def set_status(self, message: str, level: str = "info", timeout: int = 3) -> None:

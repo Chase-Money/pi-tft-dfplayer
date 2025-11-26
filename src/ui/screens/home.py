@@ -89,6 +89,8 @@ class HomeScreen(ScreenView):
         # Draw buttons
         for button in self.buttons:
             button.draw(draw, font_large)
+        # Track dirty rect for potential partial present
+        self.last_dirty = [(margin, start_y, button_width, 3 * button_height + 2 * button_spacing)]
 
     def handle_event(self, event: UIEvent) -> bool:
         # Extract coordinates from event payload

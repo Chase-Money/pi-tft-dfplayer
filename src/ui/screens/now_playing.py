@@ -111,6 +111,12 @@ class NowPlayingScreen(ScreenView):
         # Draw controls
         self.play_button.draw(draw, fonts["small"])
         self.slider.draw(draw, fonts["small"])
+        # Track a coarse dirty region (controls + artwork area)
+        self.last_dirty = [
+            (margin, artwork_y, artwork_size, artwork_size),
+            (margin, button_y, play_w, button_h),
+            (margin, slider_y, int(w * 0.7), slider_h + button_h + max(8, int(12 * scale))),
+        ]
 
     def handle_event(self, event: UIEvent) -> bool:
         if self.back_button.handle_event(event):

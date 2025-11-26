@@ -92,6 +92,7 @@ class TrackBrowserScreen(ScreenView):
 
         # Draw list
         self.list_widget.draw(draw, self.list_rect, fonts["small"])
+        self.last_dirty = [self.list_rect]
 
     def handle_event(self, event: UIEvent) -> bool:
         if event.type == "drag":
