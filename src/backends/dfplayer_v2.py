@@ -159,11 +159,11 @@ class DFPlayerBackend(PlaybackBackend):
                 self.device.play_track(number)
                 with self._state_lock:
                     self.current_track = number
-                    self.playing = True
+                    self.play_pending = True  # Let listener set playing=True when 0x3E received
             except Exception as exc:
                 # Reset state on failure
                 with self._state_lock:
-                    self.playing = False
+                    self.play_pending = False
                 # Don't reset current_track - keep track of what was attempted
                 logger.error(f"Failed to play track {number}: {exc}")
                 raise
@@ -218,9 +218,9 @@ class DFPlayerBackend(PlaybackBackend):
     def _stop_listener(self) -> None:
         self._stop_event.set()  # Signal thread to stop
         if self._listener_thread and self._listener_thread.is_alive():
-            self._listener_thread.join(timeout=3.0)
+            self._listener_thread.join(timeout=5.0)
             if self._listener_thread.is_alive():
-                logger.warning("Listener thread did not terminate within 3.0s timeout")
+                logger.warning("Listener thread did not terminate within 5.0s timeout")
         self._listener_thread = None
 
     def _listener_loop(self) -> None:
