@@ -125,7 +125,7 @@ class Application:
     # Main loop
     def run(self) -> None:
         logger.info("Starting v2 Application loop")
-        self.renderer.render_and_present()
+        self.renderer.render(); self.renderer.present()
 
         if not self.touch_controller or not getattr(self.touch_controller, "available", False):
             logger.warning("Touch input unavailable; rendered one frame")
@@ -142,7 +142,7 @@ class Application:
 
             if refreshed:
                 dirty = getattr(self.screen_manager.current, "last_dirty", None)
-                self.renderer.render_and_present(dirty_rects=dirty)
+                self.renderer.render(); self.renderer.present(dirty_rects=dirty)
 
     def _touch_to_ui_event(self, touch_event) -> Optional[UIEvent]:
         event_type = getattr(touch_event, "type", None)
