@@ -313,12 +313,17 @@ class Config:
             max_y: Maximum Y coordinate
 
         Raises:
-            ValueError: If min >= max for either axis
+            ValueError: If min >= max for either axis or values are out of expected range
         """
         if min_x >= max_x:
             raise ValueError(f"Invalid X calibration: min_x ({min_x}) must be < max_x ({max_x})")
         if min_y >= max_y:
             raise ValueError(f"Invalid Y calibration: min_y ({min_y}) must be < max_y ({max_y})")
+
+        # Optional sanity bounds for typical 12-bit panels
+        for val, axis in ((min_x, "min_x"), (max_x, "max_x"), (min_y, "min_y"), (max_y, "max_y")):
+            if val < 0 or val > 4095:
+                raise ValueError(f"Calibration {axis} ({val}) out of expected range 0-4095")
 
         self.set("touch_calibration", {
             "min_x": min_x,

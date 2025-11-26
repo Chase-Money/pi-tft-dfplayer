@@ -104,8 +104,7 @@ class CalibrationScreen(ScreenView):
     # ------------------------------------------------------------------
     def _finalize(self) -> None:
         app = self._app()
-        # Raw coordinates are already in hardware space - use them directly!
-        # No orientation inversion needed since they're pre-transformation
+        # Raw coordinates are in hardware space
         left_x = int(statistics.median([self.samples[0][0], self.samples[3][0]]))
         right_x = int(statistics.median([self.samples[1][0], self.samples[2][0]]))
         top_y = int(statistics.median([self.samples[0][1], self.samples[1][1]]))
@@ -116,7 +115,31 @@ class CalibrationScreen(ScreenView):
         if bottom_y <= top_y:
             bottom_y = top_y + 1
 
+        # Sanity checks: minimum span and within expected bounds (12-bit default)
+        min_span = 20
+        if (right_x - left_x) < min_span or (bottom_y - top_y) < min_span:
+            app.set_status("Calibration span too small; retry", "error", 4)
+            self.manager.pop()
+            return
+        # If driver bounds available, enforce them
+        bounds = app.get_touch_driver_bounds() if hasattr(app, "get_touch_driver_bounds") else None
+        if bounds:
+            min_x, max_x, min_y, max_y = bounds
+            span_x = max_x - min_x
+            span_y = max_y - min_y
+            min_required_x = max(min_span, int(0.05 * span_x))
+            min_required_y = max(min_span, int(0.05 * span_y))
+            if (right_x - left_x) < min_required_x or (bottom_y - top_y) < min_required_y:
+                app.set_status("Calibration span too small; retry", "error", 4)
+                self.manager.pop()
+                return
+            if not (min_x <= left_x < right_x <= max_x and min_y <= top_y < bottom_y <= max_y):
+                app.set_status("Calibration out of bounds; retry", "error", 4)
+                self.manager.pop()
+                return
+
         app.set_touch_calibration((left_x, right_x, top_y, bottom_y))
+        app.set_status("Calibration saved", "success", 3)
         self.manager.pop()
 
     def _app(self):
