@@ -14,3 +14,4 @@
 2025-11-24 | feature/framework-migration | Added partial push plumbing (push_partial) and initial dirty-rect plumbing in renderer/screens | pytest -q (quick) pending | Next: refine dirty rect collection & full test run.
 2025-11-26 | feature/framework-migration | PR #17: Framework migration consolidation - config merge, DFPlayer refactoring, file cleanup, snake_case standardization | 188/188 tests pass (CI ✅) | Ready for merge after bot review fixes.
 2025-11-26 | feature/framework-migration | Bot review fixes: calibration validation, state sync in DFPlayer, thread timeout increase, event queue monitoring | CI tests pass | Addressed all "Must Fix" and "Should Fix" items from bot review.
+2025-11-24 | feature/framework-migration | Added RobustSerial wrapper and hooked into DFPlayerBackend (initial wiring) | pytest -q (quick) pending | Needs hardware validation and potential DFPlayer integration adjustments.

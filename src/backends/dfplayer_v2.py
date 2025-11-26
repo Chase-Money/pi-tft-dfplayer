@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional, Callable
 
 from backends.base import PlaybackBackend
 from hardware.dfplayer import DFPlayer
+from backends.robust_serial import RobustSerial
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,10 @@ class DFPlayerBackend(PlaybackBackend):
     # Lifecycle -----------------------------------------------------
     def initialize(self) -> bool:
         try:
+            serial_conn = RobustSerial(self.port, self.baudrate, timeout=0.1)
             self.device = self._dfplayer_factory(self.port, self.baudrate)
+            if hasattr(self.device, "serial"):
+                self.device.serial = serial_conn
 
             # Validate device was created successfully
             if self.device is None:
