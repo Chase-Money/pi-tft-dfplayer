@@ -13,6 +13,7 @@ import tempfile
 from pathlib import Path
 from threading import RLock
 from typing import Any, Dict, Optional
+from .orients import ORIENTS  # backwards compat
 
 logger = logging.getLogger(__name__)
 

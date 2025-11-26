@@ -582,7 +582,7 @@ class DFPlayerTFTApp:
         cal = self.config.get_touch_calibration()
         if cal:
             self.touch.set_calibration(*cal)
-        idx = self.config.get_touch_orientation()
+        idx = self.config.get_touch_orientation_index()
         self.orientation_index = idx % len(ORIENTS)
         orient = ORIENTS[self.orientation_index]
         self.touch.set_orientation(

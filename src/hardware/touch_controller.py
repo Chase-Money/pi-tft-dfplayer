@@ -64,15 +64,14 @@ class TouchController:
         # Load gesture thresholds from config or use defaults
         if config:
             thresholds = config.get_touch_thresholds()
-            self.tap_threshold_ms = thresholds.get("tap_threshold_ms", 400)
-            self.drag_threshold_px = thresholds.get("drag_threshold_px", 12)
+            self.tap_threshold_ms = thresholds.get("tap_threshold_ms", 300)
+            self.drag_threshold_px = thresholds.get("drag_threshold_px", 10)
             self.swipe_threshold_px = thresholds.get("swipe_threshold_px", 48)
         else:
             # Defaults tuned for responsiveness on resistive panels
-            # Very high thresholds needed due to significant panel jitter
-            self.tap_threshold_ms = 500  # Increased from 400ms
-            self.drag_threshold_px = 50  # Increased from 25px - resistive panels have major jitter
-            self.swipe_threshold_px = 80  # Increased from 60px for clear swipe intent
+            self.tap_threshold_ms = 300
+            self.drag_threshold_px = 10
+            self.swipe_threshold_px = 48
 
     def get_events(self, timeout: float = 0.0) -> List[TouchEvent]:
         """
@@ -190,6 +189,10 @@ class TouchController:
         distance = (dx**2 + dy**2) ** 0.5
 
         self.is_pressed = False
+
+        # Debounce: ignore ultra-short taps (<20ms) which are noise on resistive panels
+        if duration_ms < 20:
+            return None
 
         # Determine gesture type
         if duration_ms < self.tap_threshold_ms and distance < self.drag_threshold_px:

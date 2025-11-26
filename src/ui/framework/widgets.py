@@ -40,6 +40,7 @@ class ButtonWidget:
             fill = (min(255, int(r + (255 - r) * 0.35)),
                     min(255, int(g + (255 - g) * 0.35)),
                     min(255, int(b + (255 - b) * 0.35)))
+        # Draw a slightly larger hitbox outline for debug if needed (disabled by default)
         draw.rounded_rectangle(xywh_to_xyxy(self.rect), radius=self.radius, fill=fill)
         label = self.label() if callable(self.label) else self.label
         bbox = draw.textbbox((0, 0), label, font=font)
@@ -52,16 +53,16 @@ class ButtonWidget:
         pos = event.get_point()
         if not pos:
             return False
-        if self._contains(pos):
+        if self._contains(pos, expand=4):
             self.on_press()
             self._flash_until = time.monotonic() + 0.15
             return True
         return False
 
-    def _contains(self, pos: Tuple[int, int]) -> bool:
+    def _contains(self, pos: Tuple[int, int], expand: int = 0) -> bool:
         x, y = pos
         rx, ry, rw, rh = self.rect
-        return rx <= x <= rx + rw and ry <= y <= ry + rh
+        return (rx - expand) <= x <= (rx + rw + expand) and (ry - expand) <= y <= (ry + rh + expand)
 
 
 class ListWidget:
