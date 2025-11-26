@@ -41,6 +41,7 @@ Based on the latest codebase review, here are the immediate refactoring prioriti
 - Use feature branches for all work (e.g., `feature/theme-engine-lcars`).
 - Keep `main` stable; no unchecked `_v2` copies.
 - Document non-obvious behavior or hardware expectations in `docs/` or `docs/ai/` as appropriate.
+- Before planning/starting work, read `docs/ai/TASK_LOG.md` to pick up where the team left off and append your updates when done.
 
 ## Touch & DFPlayer Notes
 - Touch: ensure calibration/orientation from config, sane gesture thresholds (tap ~400ms, drag ~12px, swipe ~48px); process full event batches.
@@ -48,3 +49,9 @@ Based on the latest codebase review, here are the immediate refactoring prioriti
 
 ## Theming
 - Themes live in `themes/*.json`; select via `DFPLAYER_THEME`. Schema and samples: see `docs/LCARS_THEME_PLAN.md`.
+
+## Future Development Roadmap
+
+For planning of major new features and significant improvements, refer to the following document:
+
+- **[Reliability, Performance, and Spotify Integration Plan](../reliability_spotify.md)**: Details strategies for improving UI rendering performance, making hardware communication more robust, and provides a step-by-step guide for integrating Spotify as a new audio backend.
