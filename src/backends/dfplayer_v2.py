@@ -198,7 +198,7 @@ class DFPlayerBackend(PlaybackBackend):
     def _stop_listener(self) -> None:
         self._stop_event.set()  # Signal thread to stop
         if self._listener_thread and self._listener_thread.is_alive():
-            self._listener_thread.join(timeout=1.0)
+            self._listener_thread.join(timeout=3.0)
             if self._listener_thread.is_alive():
                 logger.warning("Listener thread did not terminate within 3.0s timeout")
         self._listener_thread = None
