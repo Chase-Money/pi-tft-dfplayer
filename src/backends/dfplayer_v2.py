@@ -26,6 +26,7 @@ class DFPlayerBackend(PlaybackBackend):
         self.volume_level: int = 18
         self.playing: bool = False
         self.play_pending: bool = False
+        self._state_lock = threading.Lock()  # Protect playing/play_pending state
         self._event_queue: queue.Queue = queue.Queue(maxsize=100)  # Prevent unbounded growth
         self._listener_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()  # Signal listener thread to stop
@@ -69,9 +70,10 @@ class DFPlayerBackend(PlaybackBackend):
             except Exception as exc:
                 logger.error(f"Error during DFPlayer shutdown: {exc}")
         self.device = None
-        self.playing = False
-        self.play_pending = False
-        self.current_track = None
+        with self._state_lock:
+            self.playing = False
+            self.play_pending = False
+            self.current_track = None
 
     def cleanup(self):
         """Alias for shutdown for backward compatibility."""
@@ -81,11 +83,13 @@ class DFPlayerBackend(PlaybackBackend):
     def play(self):
         if self.device and self.device.is_connected:
             try:
-                self.play_pending = True
+                with self._state_lock:
+                    self.play_pending = True
                 self.device.play()
             except Exception as exc:
-                self.playing = False  # Ensure consistent state on failure
-                self.play_pending = False
+                with self._state_lock:
+                    self.playing = False  # Ensure consistent state on failure
+                    self.play_pending = False
                 logger.error(f"Failed to play: {exc}")
                 raise
 
@@ -97,8 +101,9 @@ class DFPlayerBackend(PlaybackBackend):
         if self.device and self.device.is_connected:
             try:
                 self.device.pause()
-                self.playing = False
-                self.play_pending = False
+                with self._state_lock:
+                    self.playing = False
+                    self.play_pending = False
             except Exception as exc:
                 # State already False, no need to reset
                 logger.error(f"Failed to pause: {exc}")
@@ -108,36 +113,42 @@ class DFPlayerBackend(PlaybackBackend):
         if self.device and self.device.is_connected:
             try:
                 self.device.stop()
-                self.playing = False
-                self.play_pending = False
-                self.current_track = None
+                with self._state_lock:
+                    self.playing = False
+                    self.play_pending = False
+                    self.current_track = None
             except Exception as exc:
                 # Ensure consistent state on failure
-                self.playing = False
-                self.play_pending = False
-                self.current_track = None
+                with self._state_lock:
+                    self.playing = False
+                    self.play_pending = False
+                    self.current_track = None
                 logger.error(f"Failed to stop: {exc}")
                 raise
 
     def next_track(self):
         if self.device and self.device.is_connected:
             try:
-                self.play_pending = True
+                with self._state_lock:
+                    self.play_pending = True
                 self.device.next_track()
             except Exception as exc:
-                self.playing = False  # Ensure consistent state on failure
-                self.play_pending = False
+                with self._state_lock:
+                    self.playing = False  # Ensure consistent state on failure
+                    self.play_pending = False
                 logger.error(f"Failed to skip to next track: {exc}")
                 raise
 
     def prev_track(self):
         if self.device and self.device.is_connected:
             try:
-                self.play_pending = True
+                with self._state_lock:
+                    self.play_pending = True
                 self.device.prev_track()
             except Exception as exc:
-                self.playing = False  # Ensure consistent state on failure
-                self.play_pending = False
+                with self._state_lock:
+                    self.playing = False  # Ensure consistent state on failure
+                    self.play_pending = False
                 logger.error(f"Failed to skip to previous track: {exc}")
                 raise
 
@@ -146,32 +157,41 @@ class DFPlayerBackend(PlaybackBackend):
         if self.device and self.device.is_connected:
             try:
                 self.device.play_track(number)
-                self.current_track = number
-                self.playing = True
+                with self._state_lock:
+                    self.current_track = number
+                    self.playing = True
             except Exception as exc:
                 # Reset state on failure
-                self.playing = False
+                with self._state_lock:
+                    self.playing = False
                 # Don't reset current_track - keep track of what was attempted
                 logger.error(f"Failed to play track {number}: {exc}")
                 raise
 
     def set_volume(self, volume: int):
         volume = max(0, min(30, int(volume)))
-        self.volume_level = volume
         if self.device and self.device.is_connected:
             try:
                 self.device.set_volume(volume)
+                self.volume_level = volume  # Update state only after successful hardware call
             except Exception as exc:
                 logger.error(f"Failed to set volume: {exc}")
+        else:
+            # No device connected, just update cached value
+            self.volume_level = volume
 
     # Status --------------------------------------------------------
     def get_status(self) -> Dict[str, Any]:
         with self._dropped_events_lock:
             dropped_events = self._dropped_events
 
+        with self._state_lock:
+            playing = self.playing
+            track_number = self.current_track
+
         status = {
-            "playing": self.playing,
-            "track_number": self.current_track,
+            "playing": playing,
+            "track_number": track_number,
             "volume": self.volume_level,
             "connected": self.device.is_connected if self.device else False,
             "error": None,
@@ -222,13 +242,15 @@ class DFPlayerBackend(PlaybackBackend):
             try:
                 if cmd == 0x3D:
                     self._event_queue.put({"type": "track_finished"}, block=False)
-                    self.playing = False
-                    self.play_pending = False
+                    with self._state_lock:
+                        self.playing = False
+                        self.play_pending = False
                 elif cmd == 0x3E:
                     track_num = (response[5] << 8) | response[6]
                     self._event_queue.put({"type": "track_started", "track": track_num}, block=False)
-                    self.playing = True
-                    self.play_pending = False
+                    with self._state_lock:
+                        self.playing = True
+                        self.play_pending = False
                 elif cmd == 0x40:
                     self._event_queue.put({"type": "error", "code": response[6]}, block=False)
             except queue.Full:

@@ -16,10 +16,22 @@ class RobustSerial:
     def __init__(self, device="/dev/serial0", baudrate=9600, timeout=0.1, reconnect_delay=2.0):
         self.device = device
         self.baudrate = baudrate
-        self.timeout = timeout
+        self._timeout = timeout
         self.reconnect_delay = reconnect_delay
         self.ser: Optional[serial.Serial] = None
         self._connect()
+
+    @property
+    def timeout(self):
+        """Get current timeout value."""
+        return self.ser.timeout if self.ser else self._timeout
+
+    @timeout.setter
+    def timeout(self, value):
+        """Set timeout, updating both stored value and active serial connection."""
+        self._timeout = value
+        if self.ser:
+            self.ser.timeout = value
 
     def _connect(self):
         try:
@@ -40,6 +52,9 @@ class RobustSerial:
         except (serial.SerialException, OSError) as e:
             logger.warning(f"Serial write error: {e}; retrying after reconnect")
             self._reconnect()
+            if not self.ser:
+                logger.error("Reconnect failed, serial port unavailable")
+                return False
             try:
                 self.ser.write(data)
                 return True
@@ -60,6 +75,9 @@ class RobustSerial:
         except (serial.SerialException, OSError) as e:
             logger.warning(f"Serial read error: {e}; retrying after reconnect")
             self._reconnect()
+            if not self.ser:
+                logger.error("Reconnect failed, serial port unavailable")
+                return None
             try:
                 return self.ser.read(size)
             except Exception as e2:
