@@ -27,6 +27,7 @@ class DFPlayerBackend(PlaybackBackend):
         self.playing: bool = False
         self.play_pending: bool = False
         self._state_lock = threading.Lock()  # Protect playing/play_pending state
+        self._device_lock = threading.Lock()  # Protect device access during shutdown
         self._event_queue: queue.Queue = queue.Queue(maxsize=100)  # Prevent unbounded growth
         self._listener_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()  # Signal listener thread to stop
@@ -63,13 +64,14 @@ class DFPlayerBackend(PlaybackBackend):
 
     def shutdown(self):
         self._stop_listener()
-        if self.device:
-            try:
-                self.device.stop()
-                self.device.close()
-            except Exception as exc:
-                logger.error(f"Error during DFPlayer shutdown: {exc}")
-        self.device = None
+        with self._device_lock:
+            if self.device:
+                try:
+                    self.device.stop()
+                    self.device.close()
+                except Exception as exc:
+                    logger.error(f"Error during DFPlayer shutdown: {exc}")
+            self.device = None
         with self._state_lock:
             self.playing = False
             self.play_pending = False
@@ -189,15 +191,19 @@ class DFPlayerBackend(PlaybackBackend):
             playing = self.playing
             track_number = self.current_track
 
+        with self._device_lock:
+            connected = self.device.is_connected if self.device else False
+            has_device = self.device is not None
+
         status = {
             "playing": playing,
             "track_number": track_number,
             "volume": self.volume_level,
-            "connected": self.device.is_connected if self.device else False,
+            "connected": connected,
             "error": None,
             "dropped_events": dropped_events,  # Include dropped event count for monitoring
         }
-        if self.device and not self.device.is_connected:
+        if has_device and not connected:
             status["error"] = "DFPlayer not connected"
         return status
 
@@ -226,7 +232,8 @@ class DFPlayerBackend(PlaybackBackend):
     def _listener_loop(self) -> None:
         logger.debug("DFPlayer backend listener started")
         while not self._stop_event.is_set():
-            dev = self.device
+            with self._device_lock:
+                dev = self.device
             if not dev or not getattr(dev, "is_connected", False):
                 break
             try:
@@ -261,4 +268,5 @@ class DFPlayerBackend(PlaybackBackend):
 
     @property
     def is_connected(self) -> bool:
-        return self.device is not None and getattr(self.device, "is_connected", False)
+        with self._device_lock:
+            return self.device is not None and getattr(self.device, "is_connected", False)
