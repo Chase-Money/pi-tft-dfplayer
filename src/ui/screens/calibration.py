@@ -104,18 +104,13 @@ class CalibrationScreen(ScreenView):
     # ------------------------------------------------------------------
     def _finalize(self) -> None:
         app = self._app()
-        driver_bounds = app.get_touch_driver_bounds()
-        if not driver_bounds:
-            app.set_status("Driver bounds unavailable", "error", 4)
-            self.manager.pop()
-            return
+        # Raw coordinates are already in hardware space - use them directly!
+        # No orientation inversion needed since they're pre-transformation
+        left_x = int(statistics.median([self.samples[0][0], self.samples[3][0]]))
+        right_x = int(statistics.median([self.samples[1][0], self.samples[2][0]]))
+        top_y = int(statistics.median([self.samples[0][1], self.samples[1][1]]))
+        bottom_y = int(statistics.median([self.samples[2][1], self.samples[3][1]]))
 
-        orient = app.get_touch_orientation()
-        inv_points = [self._invert_orientation(raw, orient, driver_bounds) for raw in self.samples]
-        left_x = int(statistics.median([inv_points[0][0], inv_points[3][0]]))
-        right_x = int(statistics.median([inv_points[1][0], inv_points[2][0]]))
-        top_y = int(statistics.median([inv_points[0][1], inv_points[1][1]]))
-        bottom_y = int(statistics.median([inv_points[2][1], inv_points[3][1]]))
         if right_x <= left_x:
             right_x = left_x + 1
         if bottom_y <= top_y:
