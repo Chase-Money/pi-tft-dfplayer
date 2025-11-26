@@ -95,7 +95,7 @@ class Config:
                 # Validate loaded data
                 if not isinstance(loaded_data, dict):
                     logger.error("Config file is not a valid JSON object, using defaults")
-                    self._data = self.DEFAULT_VALUES.copy()
+                    self._data = copy.deepcopy(self.DEFAULT_VALUES)
                     return False
 
                 # Merge with defaults (in case new keys were added)

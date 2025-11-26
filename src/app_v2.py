@@ -242,7 +242,7 @@ class Application:
     def get_touch_orientation(self) -> dict:
         """Get current touch orientation settings."""
         if not self.touch_controller or not self.touch_controller.touch:
-            return {"SWAP_XY": False, "FLIP_X": False, "FLIP_Y": False}
+            return {"swap_xy": False, "flip_x": False, "flip_y": False}
         return self.touch_controller.touch.orientation
 
     def set_touch_calibration(self, bounds: Tuple[int, int, int, int]) -> None:

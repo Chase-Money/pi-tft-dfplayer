@@ -64,6 +64,10 @@ class DFPlayerBackend(PlaybackBackend):
         self.playing = False
         self.current_track = None
 
+    def cleanup(self):
+        """Alias for shutdown for backward compatibility."""
+        self.shutdown()
+
     # Controls ------------------------------------------------------
     def play(self):
         if self.device and self.device.is_connected:

@@ -275,9 +275,9 @@ class TouchController:
         """
         if self.touch:
             self.touch.orientation = {
-                "SWAP_XY": swap_xy,
-                "FLIP_X": flip_x,
-                "FLIP_Y": flip_y
+                "swap_xy": swap_xy,
+                "flip_x": flip_x,
+                "flip_y": flip_y
             }
             logger.info(f"Touch orientation set: swap={swap_xy}, flip_x={flip_x}, flip_y={flip_y}")
 

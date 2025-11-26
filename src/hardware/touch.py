@@ -23,7 +23,7 @@ class TouchInput:
         self.min_x, self.max_x, self.min_y, self.max_y = self._get_abs_info()
         self.screen_width = 480
         self.screen_height = 320
-        self.orientation = dict(SWAP_XY=False, FLIP_X=False, FLIP_Y=False)
+        self.orientation = dict(swap_xy=False, flip_x=False, flip_y=False)
         self.calibration = None
 
     def _find_device(self, device_path):
@@ -96,13 +96,13 @@ class TouchInput:
         else:
             min_x, max_x, min_y, max_y = self.min_x, self.max_x, self.min_y, self.max_y
 
-        if orientation.get("SWAP_XY"):
+        if orientation.get("swap_xy"):
             x, y = y, x
             # When swapping axes, also swap target dimensions
             screen_width, screen_height = screen_height, screen_width
-        if orientation.get("FLIP_X"):
+        if orientation.get("flip_x"):
             x = max_x - (x - min_x)
-        if orientation.get("FLIP_Y"):
+        if orientation.get("flip_y"):
             y = max_y - (y - min_y)
 
         if max_x == min_x: max_x = min_x + 1

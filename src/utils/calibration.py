@@ -104,13 +104,13 @@ def _calculate_calibration(
     def invert_orientation(rx, ry):
         x, y = rx, ry
 
-        if orient["FLIP_Y"]:
+        if orient["flip_y"]:
             y = (touch.driver_miny + touch.driver_maxy) - y
 
-        if orient["FLIP_X"]:
+        if orient["flip_x"]:
             x = (touch.driver_minx + touch.driver_maxx) - x
 
-        if orient["SWAP_XY"]:
+        if orient["swap_xy"]:
             x, y = y, x
 
         return x, y

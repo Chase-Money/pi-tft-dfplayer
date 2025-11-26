@@ -1,10 +1,10 @@
 ORIENTS = [
-    dict(SWAP_XY=False, FLIP_X=False, FLIP_Y=False),
-    dict(SWAP_XY=False, FLIP_X=True , FLIP_Y=False),
-    dict(SWAP_XY=False, FLIP_X=False, FLIP_Y=True ),
-    dict(SWAP_XY=False, FLIP_X=True , FLIP_Y=True ),
-    dict(SWAP_XY=True , FLIP_X=False, FLIP_Y=False),
-    dict(SWAP_XY=True , FLIP_X=True , FLIP_Y=False),
-    dict(SWAP_XY=True , FLIP_X=False, FLIP_Y=True ),
-    dict(SWAP_XY=True , FLIP_X=True , FLIP_Y=True ),
+    dict(swap_xy=False, flip_x=False, flip_y=False),
+    dict(swap_xy=False, flip_x=True , flip_y=False),
+    dict(swap_xy=False, flip_x=False, flip_y=True ),
+    dict(swap_xy=False, flip_x=True , flip_y=True ),
+    dict(swap_xy=True , flip_x=False, flip_y=False),
+    dict(swap_xy=True , flip_x=True , flip_y=False),
+    dict(swap_xy=True , flip_x=False, flip_y=True ),
+    dict(swap_xy=True , flip_x=True , flip_y=True ),
 ]

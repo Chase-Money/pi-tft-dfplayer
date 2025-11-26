@@ -100,7 +100,7 @@ class MockTouchDevice:
 
         # Calibration
         self.calibration: Optional[Tuple[int, int, int, int]] = None
-        self.orientation = {"SWAP_XY": False, "FLIP_X": False, "FLIP_Y": False}
+        self.orientation = {"swap_xy": False, "flip_x": False, "flip_y": False}
 
     def queue_tap(self, x: int, y: int):
         """
