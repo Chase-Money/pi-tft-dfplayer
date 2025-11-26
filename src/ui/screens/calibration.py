@@ -23,7 +23,8 @@ class CalibrationScreen(ScreenView):
         self.samples: List[Tuple[int, int]] = []
         self.stage = 0
         self.message = "Tap the highlighted points"
-        self.back_button = ButtonWidget((16, 4, 80, 40), "Back", self._exit)
+        # Position back button on right side to avoid covering top-left target
+        self.back_button = ButtonWidget((384, 4, 80, 40), "Back", self._exit)
 
     # ------------------------------------------------------------------
     def on_enter(self, **kwargs):
@@ -61,7 +62,9 @@ class CalibrationScreen(ScreenView):
                 color = (90, 150, 90)
             self._draw_target(draw, tx, ty, color)
 
-        self.back_button.draw(draw, fonts.get("small"))
+        # Only show back button after calibration is complete
+        if self.stage >= len(self.targets):
+            self.back_button.draw(draw, fonts.get("small"))
 
     def _draw_target(self, draw: ImageDraw.ImageDraw, tx: int, ty: int, color: Tuple[int, int, int]) -> None:
         draw.ellipse((tx - 10, ty - 10, tx + 10, ty + 10), fill=color)
