@@ -250,13 +250,18 @@ class Application:
         min_x, max_x, min_y, max_y = bounds
         logger.info(f"Setting touch calibration: ({min_x}, {max_x}, {min_y}, {max_y})")
 
-        # Apply to touch controller
-        if self.touch_controller:
-            self.touch_controller.set_calibration(min_x, max_x, min_y, max_y)
+        try:
+            # Apply to touch controller
+            if self.touch_controller:
+                self.touch_controller.set_calibration(min_x, max_x, min_y, max_y)
 
-        # Save to config
-        self.config.set_touch_calibration(min_x, max_x, min_y, max_y)
-        self.config.save()
+            # Save to config (validates bounds)
+            self.config.set_touch_calibration(min_x, max_x, min_y, max_y)
+            self.config.save()
+        except ValueError as e:
+            logger.error(f"Invalid calibration bounds: {e}")
+            self.set_status(f"Calibration error: {e}", "error", 5)
+            raise
 
     def cleanup(self) -> None:
         self.running = False

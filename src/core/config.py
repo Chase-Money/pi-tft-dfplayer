@@ -303,7 +303,23 @@ class Config:
         return self.get("touch_calibration", self.DEFAULT_VALUES["touch_calibration"])
 
     def set_touch_calibration(self, min_x: int, max_x: int, min_y: int, max_y: int) -> None:
-        """Set touch calibration parameters."""
+        """
+        Set touch calibration parameters.
+
+        Args:
+            min_x: Minimum X coordinate
+            max_x: Maximum X coordinate
+            min_y: Minimum Y coordinate
+            max_y: Maximum Y coordinate
+
+        Raises:
+            ValueError: If min >= max for either axis
+        """
+        if min_x >= max_x:
+            raise ValueError(f"Invalid X calibration: min_x ({min_x}) must be < max_x ({max_x})")
+        if min_y >= max_y:
+            raise ValueError(f"Invalid Y calibration: min_y ({min_y}) must be < max_y ({max_y})")
+
         self.set("touch_calibration", {
             "min_x": min_x,
             "max_x": max_x,
