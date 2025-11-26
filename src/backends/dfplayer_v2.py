@@ -24,7 +24,7 @@ class DFPlayerBackend(PlaybackBackend):
         self.current_track: Optional[int] = None
         self.volume_level: int = 18
         self.playing: bool = False
-        self._event_queue: queue.Queue = queue.Queue()
+        self._event_queue: queue.Queue = queue.Queue(maxsize=100)  # Prevent unbounded growth
         self._listener_thread: Optional[threading.Thread] = None
         self._listener_running = False
 
@@ -32,6 +32,12 @@ class DFPlayerBackend(PlaybackBackend):
     def initialize(self) -> bool:
         try:
             self.device = self._dfplayer_factory(self.port, self.baudrate)
+
+            # Validate device was created successfully
+            if self.device is None:
+                logger.error("DFPlayer factory returned None")
+                return False
+
             if not getattr(self.device, "is_connected", False):
                 logger.error("DFPlayer not connected")
                 self.device = None
@@ -133,6 +139,8 @@ class DFPlayerBackend(PlaybackBackend):
         self._listener_running = False
         if self._listener_thread and self._listener_thread.is_alive():
             self._listener_thread.join(timeout=0.5)
+            if self._listener_thread.is_alive():
+                logger.warning("Listener thread did not terminate within timeout")
         self._listener_thread = None
 
     def _listener_loop(self) -> None:
@@ -148,13 +156,16 @@ class DFPlayerBackend(PlaybackBackend):
                 continue
 
             cmd = response[3]
-            if cmd == 0x3D:
-                self._event_queue.put({"type": "track_finished"})
-            elif cmd == 0x3E:
-                track_num = (response[5] << 8) | response[6]
-                self._event_queue.put({"type": "track_started", "track": track_num})
-            elif cmd == 0x40:
-                self._event_queue.put({"type": "error", "code": response[6]})
+            try:
+                if cmd == 0x3D:
+                    self._event_queue.put({"type": "track_finished"}, block=False)
+                elif cmd == 0x3E:
+                    track_num = (response[5] << 8) | response[6]
+                    self._event_queue.put({"type": "track_started", "track": track_num}, block=False)
+                elif cmd == 0x40:
+                    self._event_queue.put({"type": "error", "code": response[6]}, block=False)
+            except queue.Full:
+                logger.warning("Event queue full, dropping event")
 
     @property
     def is_connected(self) -> bool:
