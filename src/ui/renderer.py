@@ -176,14 +176,11 @@ class FramebufferRendererV2:
             logger.debug(f"Presenting: fb={self.fb}, bb_size={self.backbuffer.size}, fb_size=({self.fb.width},{self.fb.height}), dirty={dirty_rects}")
 
             # Push to framebuffer (full or partial)
-            # TEMP FIX: Disable partial updates due to reshape bug
-            # if dirty_rects:
-            #     for rect in dirty_rects:
-            #         self.fb.push_partial(self.backbuffer, rect)
-            # else:
-            #     self.fb.push(self.backbuffer)
-            # Always full screen refresh until partial update bug is fixed
-            self.fb.push(self.backbuffer)
+            if dirty_rects:
+                for rect in dirty_rects:
+                    self.fb.push_partial(self.backbuffer, rect)
+            else:
+                self.fb.push(self.backbuffer)
 
             logger.debug("Present completed successfully")
 

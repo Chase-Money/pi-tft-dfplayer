@@ -50,7 +50,7 @@ class Config:
         "touch_thresholds": {
             "tap_threshold_ms": 400,  # Max time for tap (ms)
             "drag_threshold_px": 12,  # Min pixels for drag
-            "swipe_threshold_px": 48  # Min pixels for swipe
+            "swipe_threshold_px": 70  # Min pixels for swipe (increased to reduce accidental swipes)
         },
         "ui_theme": "default",
         "screen_brightness": 100,

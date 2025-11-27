@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import atexit
 import logging
+import time
 from typing import Dict, List, Optional, Tuple
 
 from core.config import Config
@@ -134,7 +135,13 @@ class Application:
             logger.warning("Touch input unavailable; rendered one frame")
             return
 
+        # Frame rate limiting: target 30fps (33.3ms per frame)
+        frame_time = 1.0 / 30.0
+        last_frame = time.time()
+
         while self.running:
+            frame_start = time.time()
+
             refreshed = self._drain_backend_events()
 
             # Check for dropped events and warn user
@@ -159,6 +166,11 @@ class Application:
                 dirty = getattr(self.screen_manager.current, "last_dirty", None)
                 self.renderer.render()
                 self.renderer.present(dirty_rects=dirty)
+
+            # Frame rate limiting: sleep to maintain 30fps
+            elapsed = time.time() - frame_start
+            if elapsed < frame_time:
+                time.sleep(frame_time - elapsed)
 
     def _touch_to_ui_event(self, touch_event) -> Optional[UIEvent]:
         event_type = getattr(touch_event, "type", None)

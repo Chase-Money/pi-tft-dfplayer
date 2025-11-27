@@ -30,19 +30,32 @@ class Framebuffer:
     def _rgb888_to_rgb565le(self, img):
         """Convert RGB888 to RGB565 little-endian using NumPy (optimized with buffer reuse)."""
         # Get image as numpy array (shape: height, width, 3)
-        arr = np.frombuffer(img.tobytes(), dtype=np.uint8).reshape((self.height, self.width, 3))
-        
-        # Convert to RGB565 directly into pre-allocated buffer
-        np.bitwise_or(
+        # Use img.size instead of self dimensions to support partial updates
+        arr = np.frombuffer(img.tobytes(), dtype=np.uint8).reshape((img.height, img.width, 3))
+
+        # For partial updates, create a temporary buffer (can't use pre-allocated)
+        # For full screen, reuse the pre-allocated buffer for performance
+        if img.size == (self.width, self.height):
+            # Full screen update: reuse buffer
             np.bitwise_or(
-                np.left_shift(np.right_shift(arr[:, :, 0], 3).astype(np.uint16), 11),
-                np.left_shift(np.right_shift(arr[:, :, 1], 2).astype(np.uint16), 5)
-            ),
-            np.right_shift(arr[:, :, 2], 3).astype(np.uint16),
-            out=self._rgb565_buffer
-        )
-        
-        return self._rgb565_buffer
+                np.bitwise_or(
+                    np.left_shift(np.right_shift(arr[:, :, 0], 3).astype(np.uint16), 11),
+                    np.left_shift(np.right_shift(arr[:, :, 1], 2).astype(np.uint16), 5)
+                ),
+                np.right_shift(arr[:, :, 2], 3).astype(np.uint16),
+                out=self._rgb565_buffer
+            )
+            return self._rgb565_buffer
+        else:
+            # Partial update: create new buffer
+            rgb565 = np.bitwise_or(
+                np.bitwise_or(
+                    np.left_shift(np.right_shift(arr[:, :, 0], 3).astype(np.uint16), 11),
+                    np.left_shift(np.right_shift(arr[:, :, 1], 2).astype(np.uint16), 5)
+                ),
+                np.right_shift(arr[:, :, 2], 3).astype(np.uint16)
+            )
+            return rgb565
 
     def push(self, img):
         """Push an image to the framebuffer."""
