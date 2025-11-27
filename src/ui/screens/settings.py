@@ -82,6 +82,12 @@ class SettingsScreen(ScreenView):
             self.orientation_button.draw(draw, fonts.get("small"))
         if self.cal_button:
             self.cal_button.draw(draw, fonts.get("small"))
+
+        # Calculate dimensions for dirty rects (in case resolution didn't change)
+        small_margin = max(2, int(4 * scale))
+        back_w = max(30, int(80 * scale))
+        button_w = int(w * 0.75)
+
         self.last_dirty = [
             (margin, small_margin, back_w, max(16, int(40 * scale))),
             (margin, orient_y, button_w, button_h),
