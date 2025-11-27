@@ -38,28 +38,34 @@ class DFPlayerBackend(PlaybackBackend):
     def initialize(self) -> bool:
         try:
             serial_conn = RobustSerial(self.port, self.baudrate, timeout=0.1)
-            self.device = self._dfplayer_factory(self.port, self.baudrate)
-            if hasattr(self.device, "serial"):
-                self.device.serial = serial_conn
+            # Create and configure device before assigning to self.device
+            device = self._dfplayer_factory(self.port, self.baudrate)
+            if hasattr(device, "serial"):
+                device.serial = serial_conn
             self._serial = serial_conn
 
             # Validate device was created successfully
-            if self.device is None:
+            if device is None:
                 logger.error("DFPlayer factory returned None")
                 return False
 
-            if not getattr(self.device, "is_connected", False):
+            if not getattr(device, "is_connected", False):
                 logger.error("DFPlayer not connected")
-                self.device = None
                 return False
 
-            self.device.set_volume(self.volume_level)
+            device.set_volume(self.volume_level)
+
+            # Assign to self.device under lock before starting listener thread
+            with self._device_lock:
+                self.device = device
+
             self._start_listener()
             logger.info("DFPlayer backend initialized successfully")
             return True
         except Exception as exc:
             logger.error(f"Failed to initialize DFPlayer backend: {exc}")
-            self.device = None
+            with self._device_lock:
+                self.device = None
             return False
 
     def shutdown(self):
@@ -160,13 +166,11 @@ class DFPlayerBackend(PlaybackBackend):
             try:
                 self.device.play_track(number)
                 with self._state_lock:
-                    self.current_track = number
-                    self.play_pending = True  # Let listener set playing=True when 0x3E received
+                    self.play_pending = True  # Listener will set current_track and playing when 0x3E received
             except Exception as exc:
                 # Reset state on failure
                 with self._state_lock:
                     self.play_pending = False
-                # Don't reset current_track - keep track of what was attempted
                 logger.error(f"Failed to play track {number}: {exc}")
                 raise
 
@@ -175,12 +179,14 @@ class DFPlayerBackend(PlaybackBackend):
         if self.device and self.device.is_connected:
             try:
                 self.device.set_volume(volume)
-                self.volume_level = volume  # Update state only after successful hardware call
+                with self._state_lock:
+                    self.volume_level = volume  # Update state only after successful hardware call
             except Exception as exc:
                 logger.error(f"Failed to set volume: {exc}")
         else:
             # No device connected, just update cached value
-            self.volume_level = volume
+            with self._state_lock:
+                self.volume_level = volume
 
     # Status --------------------------------------------------------
     def get_status(self) -> Dict[str, Any]:
@@ -190,6 +196,7 @@ class DFPlayerBackend(PlaybackBackend):
         with self._state_lock:
             playing = self.playing
             track_number = self.current_track
+            volume = self.volume_level
 
         with self._device_lock:
             connected = self.device.is_connected if self.device else False
@@ -198,7 +205,7 @@ class DFPlayerBackend(PlaybackBackend):
         status = {
             "playing": playing,
             "track_number": track_number,
-            "volume": self.volume_level,
+            "volume": volume,
             "connected": connected,
             "error": None,
             "dropped_events": dropped_events,  # Include dropped event count for monitoring
@@ -256,6 +263,7 @@ class DFPlayerBackend(PlaybackBackend):
                     track_num = (response[5] << 8) | response[6]
                     self._event_queue.put({"type": "track_started", "track": track_num}, block=False)
                     with self._state_lock:
+                        self.current_track = track_num  # Set current_track based on hardware feedback
                         self.playing = True
                         self.play_pending = False
                 elif cmd == 0x40:
