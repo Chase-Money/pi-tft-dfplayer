@@ -64,6 +64,8 @@ class DFPlayerBackend(PlaybackBackend):
             return True
         except Exception as exc:
             logger.error(f"Failed to initialize DFPlayer backend: {exc}")
+            # Clean up listener thread if it was started
+            self._stop_listener()
             with self._device_lock:
                 self.device = None
             return False
@@ -231,9 +233,9 @@ class DFPlayerBackend(PlaybackBackend):
     def _stop_listener(self) -> None:
         self._stop_event.set()  # Signal thread to stop
         if self._listener_thread and self._listener_thread.is_alive():
-            self._listener_thread.join(timeout=5.0)
+            self._listener_thread.join(timeout=10.0)  # Increased for Pi Zero 2 W serial I/O
             if self._listener_thread.is_alive():
-                logger.warning("Listener thread did not terminate within 5.0s timeout")
+                logger.warning("Listener thread did not terminate within 10.0s timeout")
         self._listener_thread = None
 
     def _listener_loop(self) -> None:
@@ -255,17 +257,19 @@ class DFPlayerBackend(PlaybackBackend):
             cmd = response[3]
             try:
                 if cmd == 0x3D:
-                    self._event_queue.put({"type": "track_finished"}, block=False)
+                    # Update state BEFORE enqueueing to prevent race condition
                     with self._state_lock:
                         self.playing = False
                         self.play_pending = False
+                    self._event_queue.put({"type": "track_finished"}, block=False)
                 elif cmd == 0x3E:
                     track_num = (response[5] << 8) | response[6]
-                    self._event_queue.put({"type": "track_started", "track": track_num}, block=False)
+                    # Update state BEFORE enqueueing to prevent race condition
                     with self._state_lock:
                         self.current_track = track_num  # Set current_track based on hardware feedback
                         self.playing = True
                         self.play_pending = False
+                    self._event_queue.put({"type": "track_started", "track": track_num}, block=False)
                 elif cmd == 0x40:
                     self._event_queue.put({"type": "error", "code": response[6]}, block=False)
             except queue.Full:

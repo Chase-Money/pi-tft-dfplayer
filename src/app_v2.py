@@ -88,6 +88,9 @@ class Application:
         self.screen_manager.services["renderer"] = self.renderer
         self.running = True
 
+        # Track dropped events for UI warnings
+        self._last_dropped_count = 0
+
         atexit.register(self.cleanup)
 
     def _load_tracks_and_metadata(self) -> None:
@@ -133,6 +136,16 @@ class Application:
 
         while self.running:
             refreshed = self._drain_backend_events()
+
+            # Check for dropped events and warn user
+            if self.backend and hasattr(self.backend, 'get_status'):
+                status = self.backend.get_status()
+                dropped = status.get('dropped_events', 0)
+                if dropped > self._last_dropped_count:
+                    count = dropped - self._last_dropped_count
+                    self.set_status(f"⚠ {count} playback events dropped", "warning", 5)
+                    self._last_dropped_count = dropped
+
             events = self.touch_controller.get_events(timeout=0)
             for evt in events:
                 ui_evt = self._touch_to_ui_event(evt)

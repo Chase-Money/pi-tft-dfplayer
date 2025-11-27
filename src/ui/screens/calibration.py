@@ -12,6 +12,7 @@ from ..framework.widgets import ButtonWidget
 from ..framework.events import UIEvent
 
 TARGET_OFFSETS = 40
+SAMPLES_PER_TARGET = 3  # Collect multiple samples per target for median filtering
 
 
 class CalibrationScreen(ScreenView):
@@ -20,8 +21,9 @@ class CalibrationScreen(ScreenView):
     def __init__(self, manager, services=None):
         super().__init__(manager, services)
         self.targets: List[Tuple[int, int]] = []
-        self.samples: List[Tuple[int, int]] = []
+        self.samples: List[List[Tuple[int, int]]] = []  # List of sample lists, one per target
         self.stage = 0
+        self.sample_count = 0  # Samples collected for current target
         self.message = "Tap the highlighted points"
         # Position back button on right side to avoid covering top-left target
         self.back_button = ButtonWidget((384, 4, 80, 40), "Back", self._exit)
@@ -40,9 +42,10 @@ class CalibrationScreen(ScreenView):
             (width - offset, height - offset),
             (offset, height - offset),
         ]
-        self.samples = []
+        self.samples = [[] for _ in self.targets]  # List of sample lists
         self.stage = 0
-        self.message = "Tap each target (hold for a moment)"
+        self.sample_count = 0
+        self.message = f"Tap each target {SAMPLES_PER_TARGET} times"
 
     # ------------------------------------------------------------------
     def render(self, context: dict) -> None:
@@ -92,23 +95,41 @@ class CalibrationScreen(ScreenView):
         if self.stage >= len(self.targets):
             return True
 
-        self.samples.append(raw)
-        self.stage += 1
+        # Collect multiple samples per target for median filtering
+        self.samples[self.stage].append(raw)
+        self.sample_count += 1
 
-        if self.stage >= len(self.targets):
-            self._finalize()
+        if self.sample_count >= SAMPLES_PER_TARGET:
+            # Move to next target
+            self.stage += 1
+            self.sample_count = 0
+
+            if self.stage >= len(self.targets):
+                self._finalize()
+            else:
+                self._app().set_status(f"Target {self.stage + 1}/{len(self.targets)}", "info", 2)
         else:
-            self._app().set_status(f"Captured point {self.stage}/{len(self.targets)}", "info", 2)
+            # Need more samples for current target
+            self._app().set_status(f"Target {self.stage + 1}: {self.sample_count}/{SAMPLES_PER_TARGET} samples", "info", 1)
         return True
 
     # ------------------------------------------------------------------
     def _finalize(self) -> None:
         app = self._app()
-        # Raw coordinates are in hardware space
-        left_x = int(statistics.median([self.samples[0][0], self.samples[3][0]]))
-        right_x = int(statistics.median([self.samples[1][0], self.samples[2][0]]))
-        top_y = int(statistics.median([self.samples[0][1], self.samples[1][1]]))
-        bottom_y = int(statistics.median([self.samples[2][1], self.samples[3][1]]))
+        # Compute median of each target's samples
+        median_samples = []
+        for target_samples in self.samples:
+            if not target_samples:
+                continue
+            med_x = int(statistics.median([s[0] for s in target_samples]))
+            med_y = int(statistics.median([s[1] for s in target_samples]))
+            median_samples.append((med_x, med_y))
+
+        # Now compute calibration bounds from median samples (same as before)
+        left_x = int(statistics.median([median_samples[0][0], median_samples[3][0]]))
+        right_x = int(statistics.median([median_samples[1][0], median_samples[2][0]]))
+        top_y = int(statistics.median([median_samples[0][1], median_samples[1][1]]))
+        bottom_y = int(statistics.median([median_samples[2][1], median_samples[3][1]]))
 
         if right_x <= left_x:
             right_x = left_x + 1

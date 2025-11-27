@@ -1,34 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(sort:*)",
-      "Bash(git add:*)",
-      "Bash(gh repo view:*)",
-      "Bash(git remote:*)",
-      "mcp__MCP_DOCKER__browser_navigate",
-      "mcp__MCP_DOCKER__browser_click",
-      "Bash(gh:*)",
-      "Bash(python3 -m pytest:*)",
-      "Bash(pip3 install:*)",
-      "Bash(python3:*)",
-      "Bash(source .venv/bin/activate)",
-      "Bash(pip install:*)",
-      "Bash(python -m pytest:*)",
-      "Bash(git mv:*)",
-      "Bash(git reset:*)",
-      "Bash(git commit:*)",
-      "Bash(git push:*)",
-      "Bash(chmod:*)",
-      "Bash(git restore:*)",
-      "Bash(ssh kiosk:*)",
-      "Bash(scp:*)",
-      "Bash(git fetch:*)",
-      "Bash(find:*)",
-      "Bash(xargs -I {} git mv {} docs/)",
-      "Bash(git log:*)",
-      "Bash(ssh:*)",
-      "Bash(git pull:*)",
-      "Bash(git checkout:*)"
+      "Bash(/tmp/deploy_to_pi.sh)",
+      "Bash(/tmp/deploy_to_pi.sh kiosk)"
     ],
     "deny": [],
     "ask": []

@@ -13,11 +13,11 @@ logger = logging.getLogger(__name__)
 
 
 class RobustSerial:
-    def __init__(self, device="/dev/serial0", baudrate=9600, timeout=0.1, reconnect_delay=2.0):
+    def __init__(self, device="/dev/serial0", baudrate=9600, timeout=0.1, reconnect_delay=0.5):
         self.device = device
         self.baudrate = baudrate
         self._timeout = timeout
-        self.reconnect_delay = reconnect_delay
+        self.reconnect_delay = reconnect_delay  # Reduced from 2.0s to 0.5s for real-time UI
         self.ser: Optional[serial.Serial] = None
         self._connect()
 
