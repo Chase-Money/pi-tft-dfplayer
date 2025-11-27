@@ -33,6 +33,7 @@ class DFPlayerBackend(PlaybackBackend):
         self._stop_event = threading.Event()  # Signal listener thread to stop
         self._dropped_events = 0  # Track dropped events for monitoring
         self._dropped_events_lock = threading.Lock()  # Protect counter access
+        self._next_drop_warn = 1  # Warn on first drop, then periodically
 
     # Lifecycle -----------------------------------------------------
     def initialize(self) -> bool:
@@ -95,11 +96,10 @@ class DFPlayerBackend(PlaybackBackend):
             try:
                 with self._state_lock:
                     self.play_pending = True
+                    self.playing = True
                 self.device.play()
             except Exception as exc:
-                with self._state_lock:
-                    self.playing = False  # Ensure consistent state on failure
-                    self.play_pending = False
+                self._reset_state_on_error()
                 logger.error(f"Failed to play: {exc}")
                 raise
 
@@ -129,10 +129,7 @@ class DFPlayerBackend(PlaybackBackend):
                     self.current_track = None
             except Exception as exc:
                 # Ensure consistent state on failure
-                with self._state_lock:
-                    self.playing = False
-                    self.play_pending = False
-                    self.current_track = None
+                self._reset_state_on_error(clear_track=True)
                 logger.error(f"Failed to stop: {exc}")
                 raise
 
@@ -143,9 +140,7 @@ class DFPlayerBackend(PlaybackBackend):
                     self.play_pending = True
                 self.device.next_track()
             except Exception as exc:
-                with self._state_lock:
-                    self.playing = False  # Ensure consistent state on failure
-                    self.play_pending = False
+                self._reset_state_on_error()
                 logger.error(f"Failed to skip to next track: {exc}")
                 raise
 
@@ -156,9 +151,7 @@ class DFPlayerBackend(PlaybackBackend):
                     self.play_pending = True
                 self.device.prev_track()
             except Exception as exc:
-                with self._state_lock:
-                    self.playing = False  # Ensure consistent state on failure
-                    self.play_pending = False
+                self._reset_state_on_error()
                 logger.error(f"Failed to skip to previous track: {exc}")
                 raise
 
@@ -169,10 +162,11 @@ class DFPlayerBackend(PlaybackBackend):
                 self.device.play_track(number)
                 with self._state_lock:
                     self.play_pending = True  # Listener will set current_track and playing when 0x3E received
+                    self.playing = True
+                    self.current_track = number
             except Exception as exc:
                 # Reset state on failure
-                with self._state_lock:
-                    self.play_pending = False
+                self._reset_state_on_error(clear_track=True)
                 logger.error(f"Failed to play track {number}: {exc}")
                 raise
 
@@ -221,6 +215,9 @@ class DFPlayerBackend(PlaybackBackend):
             return self._event_queue.get(timeout=timeout)
         except queue.Empty:
             return None
+        except Exception as exc:
+            logger.error("Unexpected error polling DFPlayer events: %s", exc)
+            return None
 
     # Internal listener --------------------------------------------
     def _start_listener(self) -> None:
@@ -241,6 +238,9 @@ class DFPlayerBackend(PlaybackBackend):
     def _listener_loop(self) -> None:
         logger.debug("DFPlayer backend listener started")
         while not self._stop_event.is_set():
+            # Test hooks: allow tests to request a single-iteration run
+            if getattr(self, "_listener_running", True) is False:
+                break
             with self._device_lock:
                 dev = self.device
             if not dev or not getattr(dev, "is_connected", False):
@@ -276,7 +276,18 @@ class DFPlayerBackend(PlaybackBackend):
                 with self._dropped_events_lock:
                     self._dropped_events += 1
                     dropped_count = self._dropped_events
-                logger.warning(f"Event queue full, dropping event (total dropped: {dropped_count})")
+                    if dropped_count >= self._next_drop_warn:
+                        logger.warning(f"Event queue full, dropping event (total dropped: {dropped_count})")
+                        # Warn on first drop and then every 10 drops
+                        self._next_drop_warn = dropped_count + 10
+
+    def _reset_state_on_error(self, clear_track: bool = False) -> None:
+        """Reset local state after a failed hardware operation."""
+        with self._state_lock:
+            self.playing = False
+            self.play_pending = False
+            if clear_track:
+                self.current_track = None
 
     @property
     def is_connected(self) -> bool:

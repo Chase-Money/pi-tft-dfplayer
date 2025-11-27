@@ -100,10 +100,6 @@ class Config:
 
                 # Merge with defaults (in case new keys were added)
                 self._data = self._merge_with_defaults(loaded_data)
-                # Ensure required defaults are present even if the file has empty dicts
-                for key, val in self.DEFAULT_VALUES.items():
-                    if key not in self._data or (isinstance(self._data[key], dict) and not self._data[key]):
-                        self._data[key] = val
                 self._loaded = True
                 logger.info(f"Configuration loaded from {self.config_path}")
                 return True
@@ -146,6 +142,10 @@ class Config:
 
                 # Atomic rename
                 os.replace(tmp_path, self.config_path)
+                try:
+                    os.chmod(self.config_path, 0o600)
+                except Exception as chmod_exc:
+                    logger.warning(f"Unable to set config permissions to 600: {chmod_exc}")
                 logger.info(f"Configuration saved to {self.config_path}")
                 return True
 
@@ -386,15 +386,16 @@ class Config:
 
     def set_touch_thresholds(
         self,
-        tap_threshold_ms: int = 800,
-        drag_threshold_px: int = 80,
-        swipe_threshold_px: int = 120
+        tap_threshold_ms: Optional[int] = None,
+        drag_threshold_px: Optional[int] = None,
+        swipe_threshold_px: Optional[int] = None
     ) -> None:
         """Set touch gesture threshold parameters."""
+        defaults = self.DEFAULT_VALUES["touch_thresholds"]
         self.set("touch_thresholds", {
-            "tap_threshold_ms": max(0, tap_threshold_ms),
-            "drag_threshold_px": max(0, drag_threshold_px),
-            "swipe_threshold_px": max(0, swipe_threshold_px)
+            "tap_threshold_ms": max(0, tap_threshold_ms if tap_threshold_ms is not None else defaults["tap_threshold_ms"]),
+            "drag_threshold_px": max(0, drag_threshold_px if drag_threshold_px is not None else defaults["drag_threshold_px"]),
+            "swipe_threshold_px": max(0, swipe_threshold_px if swipe_threshold_px is not None else defaults["swipe_threshold_px"])
         })
 
     def get_last_track(self) -> int:

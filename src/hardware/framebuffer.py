@@ -86,12 +86,10 @@ class Framebuffer:
         buf = self._rgb888_to_rgb565le(region)
         # Write row by row into mm at correct offset
         row_bytes = (x2 - x) * 2
-        for row in range(y, y2):
+        for row_idx, row in enumerate(range(y, y2)):
             offset = (row * self.width + x) * 2
-            start = (row - y) * (x2 - x)
-            end = start + (x2 - x)
             self.mm.seek(offset)
-            self.mm.write(memoryview(buf[start:end].tobytes()))
+            self.mm.write(memoryview(buf[row_idx, :].tobytes()))
 
     def close(self):
         """Close the framebuffer resources."""

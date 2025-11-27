@@ -91,6 +91,7 @@ class Application:
 
         # Track dropped events for UI warnings
         self._last_dropped_count = 0
+        self._last_drop_warn_ts = 0.0
 
         atexit.register(self.cleanup)
 
@@ -137,10 +138,10 @@ class Application:
 
         # Frame rate limiting: target 30fps (33.3ms per frame)
         frame_time = 1.0 / 30.0
-        last_frame = time.time()
+        next_frame_time = time.monotonic()
 
         while self.running:
-            frame_start = time.time()
+            frame_start = time.monotonic()
 
             refreshed = self._drain_backend_events()
 
@@ -148,10 +149,12 @@ class Application:
             if self.backend and hasattr(self.backend, 'get_status'):
                 status = self.backend.get_status()
                 dropped = status.get('dropped_events', 0)
-                if dropped > self._last_dropped_count:
+                now = time.monotonic()
+                if dropped > self._last_dropped_count and (dropped - self._last_dropped_count >= 5 or now - self._last_drop_warn_ts >= 5.0):
                     count = dropped - self._last_dropped_count
                     self.set_status(f"⚠ {count} playback events dropped", "warning", 5)
                     self._last_dropped_count = dropped
+                    self._last_drop_warn_ts = now
 
             events = self.touch_controller.get_events(timeout=0)
             for evt in events:
@@ -168,9 +171,14 @@ class Application:
                 self.renderer.present(dirty_rects=dirty)
 
             # Frame rate limiting: sleep to maintain 30fps
-            elapsed = time.time() - frame_start
-            if elapsed < frame_time:
-                time.sleep(frame_time - elapsed)
+            now = time.monotonic()
+            sleep_for = next_frame_time - now
+            if sleep_for > 0:
+                time.sleep(sleep_for)
+                next_frame_time += frame_time
+            else:
+                # We're behind; catch up without drifting
+                next_frame_time = now + frame_time
 
     def _touch_to_ui_event(self, touch_event) -> Optional[UIEvent]:
         event_type = getattr(touch_event, "type", None)
