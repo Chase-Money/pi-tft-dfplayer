@@ -91,8 +91,8 @@ class RobustSerial:
         try:
             if self.ser:
                 self.ser.close()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Error closing serial during reconnect: {e}")
         self.ser = None
         time.sleep(self.reconnect_delay)
         self._connect()

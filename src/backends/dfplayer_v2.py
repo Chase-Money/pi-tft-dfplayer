@@ -203,10 +203,14 @@ class DFPlayerBackend(PlaybackBackend):
             playing = self.playing
             track_number = self.current_track
             volume = self.volume_level
+            device = None
+            connected = False
+            has_device = False
 
         with self._device_lock:
-            connected = self.device.is_connected if self.device else False
-            has_device = self.device is not None
+            device = self.device
+            has_device = device is not None
+            connected = device.is_connected if device else False
 
         status = {
             "playing": playing,
@@ -240,7 +244,7 @@ class DFPlayerBackend(PlaybackBackend):
     def _stop_listener(self) -> None:
         self._stop_event.set()  # Signal thread to stop
         if self._listener_thread and self._listener_thread.is_alive():
-            self._listener_thread.join(timeout=10.0)  # Increased for Pi Zero 2 W serial I/O
+            self._listener_thread.join(timeout=2.0)  # Keep shutdown responsive on embedded targets
             if self._listener_thread.is_alive():
                 logger.warning("Listener thread did not terminate within 10.0s timeout")
         self._listener_thread = None

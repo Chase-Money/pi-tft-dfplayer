@@ -31,6 +31,12 @@ class Config:
     """
 
     DEFAULT_CONFIG_PATH = Path.home() / ".dfplayer_config.json"
+    TOUCH_THRESHOLD_DEFAULTS = {
+        "tap_threshold_ms": 400,  # Max time for tap (ms)
+        "drag_threshold_px": 12,  # Min pixels for drag
+        "swipe_threshold_px": 70,  # Min pixels for swipe (increased to reduce accidental swipes)
+        "tap_debounce_ms": 100,  # Min time between taps to prevent double-tap (ms)
+    }
 
     DEFAULT_VALUES = {
         "volume": 15,
@@ -47,12 +53,7 @@ class Config:
             "flip_y": False
         },
         "touch_orientation_index": 6,
-        "touch_thresholds": {
-            "tap_threshold_ms": 400,  # Max time for tap (ms)
-            "drag_threshold_px": 12,  # Min pixels for drag
-            "swipe_threshold_px": 70,  # Min pixels for swipe (increased to reduce accidental swipes)
-            "tap_debounce_ms": 100  # Min time between taps to prevent double-tap (ms)
-        },
+        "touch_thresholds": TOUCH_THRESHOLD_DEFAULTS,
         "ui_theme": "default",
         "screen_brightness": 100,
         "auto_play": False,
@@ -146,7 +147,7 @@ class Config:
                 try:
                     os.chmod(self.config_path, 0o600)
                 except Exception as chmod_exc:
-                    logger.warning(f"Unable to set config permissions to 600: {chmod_exc}")
+                    logger.error(f"Unable to set config permissions to 600: {chmod_exc}")
                 logger.info(f"Configuration saved to {self.config_path}")
                 return True
 
@@ -249,7 +250,7 @@ class Config:
     @staticmethod
     def _deep_merge(base: Dict, override: Dict) -> Dict:
         """
-        Recursively merge override into base.
+        Recursively merge override into base (dicts only; lists are replaced, not merged).
 
         Args:
             base: Base dictionary
@@ -303,7 +304,17 @@ class Config:
         """Get touch calibration parameters."""
         return self.get("touch_calibration", self.DEFAULT_VALUES["touch_calibration"])
 
-    def set_touch_calibration(self, min_x: int, max_x: int, min_y: int, max_y: int) -> None:
+    def set_touch_calibration(
+        self,
+        min_x: int,
+        max_x: int,
+        min_y: int,
+        max_y: int,
+        *,
+        validate_range: bool = True,
+        adc_min: int = 0,
+        adc_max: int = 4095,
+    ) -> None:
         """
         Set touch calibration parameters.
 
@@ -321,10 +332,11 @@ class Config:
         if min_y >= max_y:
             raise ValueError(f"Invalid Y calibration: min_y ({min_y}) must be < max_y ({max_y})")
 
-        # Optional sanity bounds for typical 12-bit panels
-        for val, axis in ((min_x, "min_x"), (max_x, "max_x"), (min_y, "min_y"), (max_y, "max_y")):
-            if val < 0 or val > 4095:
-                raise ValueError(f"Calibration {axis} ({val}) out of expected range 0-4095")
+        if validate_range:
+            # Optional sanity bounds for typical panels; allow override for other hardware
+            for val, axis in ((min_x, "min_x"), (max_x, "max_x"), (min_y, "min_y"), (max_y, "max_y")):
+                if val < adc_min or val > adc_max:
+                    raise ValueError(f"Calibration {axis} ({val}) out of expected range {adc_min}-{adc_max}")
 
         self.set("touch_calibration", {
             "min_x": min_x,
