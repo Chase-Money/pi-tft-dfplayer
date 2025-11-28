@@ -70,28 +70,29 @@ class ButtonWidget:
                 return True
             return False
 
-        # Release event: clear pressed state
-        if event.type == "release":
-            was_pressed = self._pressed
-            self._pressed = False
-            # Only trigger action if released within button bounds
-            if was_pressed and self._contains(pos, expand=4):
+        # For any other event type, if we're pressed and it's in bounds, trigger action
+        # This handles the case where touch releases become swipe/drag events
+        if self._pressed:
+            was_in_bounds = self._contains(pos, expand=4)
+            self._pressed = False  # Always clear pressed state
+
+            # If it was in bounds when pressed and still in bounds, trigger action
+            if was_in_bounds and event.type in ("tap", "drag", "swipe"):
                 if self._debug_log:
-                    logger.debug(f"[BTN] activated label={self.label if isinstance(self.label, str) else self.label()} pos={pos} rect={self.rect}")
+                    logger.debug(f"[BTN] activated via {event.type} label={self.label if isinstance(self.label, str) else self.label()} pos={pos} rect={self.rect}")
                 self.on_press()
                 self._flash_until = time.monotonic() + 0.15
                 return True
-            return was_pressed  # Return True if we were tracking this press
+            return was_in_bounds  # Return True if we were tracking this
 
-        # Tap event: legacy support
+        # Not pressed - handle tap as standalone event
         if event.type == "tap":
             if self._contains(pos, expand=4):
                 if self._debug_log:
-                    logger.debug(f"[BTN] hit label={self.label if isinstance(self.label, str) else self.label()} pos={pos} rect={self.rect}")
+                    logger.debug(f"[BTN] tap label={self.label if isinstance(self.label, str) else self.label()} pos={pos} rect={self.rect}")
                 self.on_press()
                 self._flash_until = time.monotonic() + 0.15
                 return True
-            return False
 
         return False
 
