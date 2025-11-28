@@ -164,9 +164,15 @@ class Application:
                     refreshed = True
 
             if refreshed:
-                # Get dirty rect hints from screen if available (for partial updates)
-                # Defaults to None for full screen update if screen doesn't provide hints
-                dirty = getattr(self.screen_manager.current, "last_dirty", None)
+                # Force full screen refresh after screen navigation to prevent artifacts
+                if self.screen_manager.needs_full_refresh():
+                    logger.info("[APP] Full screen refresh after navigation")
+                    dirty = None
+                    self.screen_manager.clear_refresh_flag()
+                else:
+                    # Get dirty rect hints from screen if available (for partial updates)
+                    # Defaults to None for full screen update if screen doesn't provide hints
+                    dirty = getattr(self.screen_manager.current, "last_dirty", None)
                 self.renderer.render()
                 self.renderer.present(dirty_rects=dirty)
 

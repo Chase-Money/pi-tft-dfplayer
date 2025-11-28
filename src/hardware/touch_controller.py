@@ -157,6 +157,11 @@ class TouchController:
 
     def _handle_press(self) -> Optional[TouchEvent]:
         """Handle touch press event."""
+        # Filter out noise touches at (0,0) - common spurious events on resistive panels
+        if self.last_x == 0 and self.last_y == 0:
+            logger.debug(f"[TOUCHCTRL] Ignoring noise touch at (0, 0)")
+            return None
+
         # Scale coordinates
         sx, sy = self.touch.scale_xy(self.last_x, self.last_y)
 
