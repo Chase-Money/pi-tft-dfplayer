@@ -10,3 +10,4 @@
 2025-11-22 | feature/framework-migration | Phase 3 complete: Created ArtworkWidget, archived monolithic code (1,995 lines), updated systemd service to main.py | 166/166 tests pass | Migration complete, ready for hardware testing.
 2025-11-23 | feature/framework-migration | Fixed all PR #15 test failures: touch batching, SWAP_XY transform, threading.Lock isinstance | 188/188 tests pass (CI ✅) | PR #15 ready for merge.
 2025-11-24 | feature/framework-migration | Captured PR split plan (PR_SPLIT_PLAN.md): PR1 core consolidation, PR2 UI + theme migration, PR3 cleanup | n/a | Keep PRs small per bot feedback.
+2025-11-28 | feature/kivy-migration | Drafted high-level Kivy migration plan and milestones; opened branch | n/a | See docs/ai/KIVY_MIGRATION_PLAN.md for scope and phase breakdown.
