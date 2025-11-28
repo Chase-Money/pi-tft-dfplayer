@@ -93,5 +93,13 @@ class Framebuffer:
 
     def close(self):
         """Close the framebuffer resources."""
-        self.mm.close()
-        self.fb_file.close()
+        try:
+            if hasattr(self, "mm") and self.mm and not self.mm.closed:
+                self.mm.close()
+        except Exception:
+            pass
+        try:
+            if hasattr(self, "fb_file") and self.fb_file and not self.fb_file.closed:
+                self.fb_file.close()
+        except Exception:
+            pass

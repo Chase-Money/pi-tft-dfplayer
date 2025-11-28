@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 class DFPlayerBackend(PlaybackBackend):
     """Playback backend that wraps the hardware DFPlayer interface."""
 
+    DEFAULT_VOLUME = 18
+    EVENT_QUEUE_SIZE = 100
+    DROP_WARN_STEP = 10
+
     def __init__(self, port: str = '/dev/serial0', baudrate: int = 9600,
                  dfplayer_factory: Optional[Callable[[str, int], DFPlayer]] = None):
         super().__init__(name="DFPlayer")
@@ -23,12 +27,12 @@ class DFPlayerBackend(PlaybackBackend):
         self._dfplayer_factory = dfplayer_factory or (lambda p, b: DFPlayer(p, b))
         self.device: Optional[DFPlayer] = None
         self.current_track: Optional[int] = None
-        self.volume_level: int = 18
+        self.volume_level: int = self.DEFAULT_VOLUME
         self.playing: bool = False
         self.play_pending: bool = False
         self._state_lock = threading.Lock()  # Protect playing/play_pending state
         self._device_lock = threading.Lock()  # Protect device access during shutdown
-        self._event_queue: queue.Queue = queue.Queue(maxsize=100)  # Prevent unbounded growth
+        self._event_queue: queue.Queue = queue.Queue(maxsize=self.EVENT_QUEUE_SIZE)  # Prevent unbounded growth
         self._listener_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()  # Signal listener thread to stop
         self._dropped_events = 0  # Track dropped events for monitoring
@@ -278,8 +282,8 @@ class DFPlayerBackend(PlaybackBackend):
                     dropped_count = self._dropped_events
                     if dropped_count >= self._next_drop_warn:
                         logger.warning(f"Event queue full, dropping event (total dropped: {dropped_count})")
-                        # Warn on first drop and then every 10 drops
-                        self._next_drop_warn = dropped_count + 10
+                        # Warn on first drop and then every N drops
+                        self._next_drop_warn = dropped_count + self.DROP_WARN_STEP
 
     def _reset_state_on_error(self, clear_track: bool = False) -> None:
         """Reset local state after a failed hardware operation."""
