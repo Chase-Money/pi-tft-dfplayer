@@ -13,6 +13,7 @@ from ..framework.events import UIEvent
 
 TARGET_OFFSETS = 40
 SAMPLES_PER_TARGET = 3  # Collect multiple samples per target for median filtering
+TARGET_RADIUS = 18  # Larger targets for easier tapping
 
 
 class CalibrationScreen(ScreenView):
@@ -25,6 +26,7 @@ class CalibrationScreen(ScreenView):
         self.stage = 0
         self.sample_count = 0  # Samples collected for current target
         self.message = "Tap the highlighted points"
+        self.flash_until = 0.0  # For visual feedback on tap
         # Position back button on right side to avoid covering top-left target
         self.back_button = ButtonWidget((384, 4, 80, 40), "Back", self._exit)
 
@@ -49,30 +51,59 @@ class CalibrationScreen(ScreenView):
 
     # ------------------------------------------------------------------
     def render(self, context: dict) -> None:
+        import time
         image: Image.Image = context["image"]
         draw: ImageDraw.ImageDraw = context["draw"]
         fonts = context["fonts"]
 
         draw.rectangle((0, 0, image.width, image.height), fill=(8, 10, 16))
-        draw.text((16, 50), self.message, font=fonts.get("medium"), fill=(230, 230, 230))
-        draw.text((16, 80), f"Target {min(self.stage + 1, len(self.targets))}/{len(self.targets)}", font=fonts.get("small"), fill=(200, 200, 200))
 
+        # Instructions
+        draw.text((16, 50), self.message, font=fonts.get("medium"), fill=(230, 230, 230))
+
+        # Progress indicator
+        if self.stage < len(self.targets):
+            progress_text = f"Target {self.stage + 1}/{len(self.targets)} - Sample {self.sample_count}/{SAMPLES_PER_TARGET}"
+            draw.text((16, 80), progress_text, font=fonts.get("small"), fill=(200, 200, 200))
+        else:
+            draw.text((16, 80), "Calibration complete!", font=fonts.get("small"), fill=(90, 230, 90))
+
+        # Draw all targets
         for idx, (tx, ty) in enumerate(self.targets):
-            color = (70, 90, 130)
+            color = (70, 90, 130)  # Inactive
             if idx == self.stage:
-                color = (255, 215, 80)
+                color = (255, 215, 80)  # Active (yellow/gold)
             elif idx < self.stage:
-                color = (90, 150, 90)
-            self._draw_target(draw, tx, ty, color)
+                color = (90, 180, 90)  # Completed (green)
+
+            # Flash effect when sample collected
+            if idx == self.stage and time.monotonic() < self.flash_until:
+                color = (255, 255, 255)  # White flash
+
+            self._draw_target(draw, tx, ty, color, active=(idx == self.stage))
 
         # Only show back button after calibration is complete
         if self.stage >= len(self.targets):
             self.back_button.draw(draw, fonts.get("small"))
 
-    def _draw_target(self, draw: ImageDraw.ImageDraw, tx: int, ty: int, color: Tuple[int, int, int]) -> None:
-        draw.ellipse((tx - 10, ty - 10, tx + 10, ty + 10), fill=color)
-        draw.line((tx - 20, ty, tx + 20, ty), fill=color, width=2)
-        draw.line((tx, ty - 20, tx, ty + 20), fill=color, width=2)
+    def _draw_target(self, draw: ImageDraw.ImageDraw, tx: int, ty: int, color: Tuple[int, int, int], active: bool = False) -> None:
+        radius = TARGET_RADIUS
+
+        # Draw outer ring for active target
+        if active:
+            draw.ellipse((tx - radius - 4, ty - radius - 4, tx + radius + 4, ty + radius + 4),
+                        outline=color, width=3)
+
+        # Draw main target circle
+        draw.ellipse((tx - radius, ty - radius, tx + radius, ty + radius), fill=color)
+
+        # Draw crosshairs
+        crosshair_len = radius + 8
+        draw.line((tx - crosshair_len, ty, tx + crosshair_len, ty), fill=color, width=3)
+        draw.line((tx, ty - crosshair_len, tx, ty + crosshair_len), fill=color, width=3)
+
+        # Draw center dot
+        draw.ellipse((tx - 3, ty - 3, tx + 3, ty + 3), fill=(255, 255, 255) if active else (200, 200, 200))
 
     # ------------------------------------------------------------------
     def handle_event(self, event: UIEvent) -> bool:
@@ -99,6 +130,10 @@ class CalibrationScreen(ScreenView):
         self.samples[self.stage].append(raw)
         self.sample_count += 1
 
+        # Flash effect for visual feedback
+        import time
+        self.flash_until = time.monotonic() + 0.2
+
         if self.sample_count >= SAMPLES_PER_TARGET:
             # Move to next target
             self.stage += 1
@@ -110,7 +145,7 @@ class CalibrationScreen(ScreenView):
                 self._app().set_status(f"Target {self.stage + 1}/{len(self.targets)}", "info", 2)
         else:
             # Need more samples for current target
-            self._app().set_status(f"Target {self.stage + 1}: {self.sample_count}/{SAMPLES_PER_TARGET} samples", "info", 1)
+            self._app().set_status(f"Sample {self.sample_count}/{SAMPLES_PER_TARGET} collected", "info", 1)
         return True
 
     # ------------------------------------------------------------------

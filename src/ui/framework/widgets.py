@@ -32,17 +32,24 @@ class ButtonWidget:
         self.text_color = text_color
         self.radius = radius
         self._flash_until = 0.0
+        self._pressed = False
         self._debug_log = debug_log
 
     def draw(self, draw: ImageDraw.ImageDraw, font) -> None:
         x, y, w, h = self.rect
         fill = self.fill
-        if time.monotonic() < self._flash_until:
+
+        # Pressed state: darken the button slightly
+        if self._pressed:
+            r, g, b = self.fill
+            fill = (max(0, int(r * 0.7)), max(0, int(g * 0.7)), max(0, int(b * 0.7)))
+        # Flash state: brighten the button
+        elif time.monotonic() < self._flash_until:
             r, g, b = self.fill
             fill = (min(255, int(r + (255 - r) * 0.35)),
                     min(255, int(g + (255 - g) * 0.35)),
                     min(255, int(b + (255 - b) * 0.35)))
-        # Draw a slightly larger hitbox outline for debug if needed (disabled by default)
+
         draw.rounded_rectangle(xywh_to_xyxy(self.rect), radius=self.radius, fill=fill)
         label = self.label() if callable(self.label) else self.label
         bbox = draw.textbbox((0, 0), label, font=font)
@@ -52,17 +59,40 @@ class ButtonWidget:
             logger.debug(f"[BTN] rect={self.rect} label={label}")
 
     def handle_event(self, event: UIEvent) -> bool:
-        if event.type != "tap":
-            return False
         pos = event.get_point()
         if not pos:
             return False
-        if self._contains(pos, expand=4):
-            if self._debug_log:
-                logger.debug(f"[BTN] hit label={self.label if isinstance(self.label, str) else self.label()} pos={pos} rect={self.rect}")
-            self.on_press()
-            self._flash_until = time.monotonic() + 0.15
-            return True
+
+        # Press event: show immediate visual feedback
+        if event.type == "press":
+            if self._contains(pos, expand=4):
+                self._pressed = True
+                return True
+            return False
+
+        # Release event: clear pressed state
+        if event.type == "release":
+            was_pressed = self._pressed
+            self._pressed = False
+            # Only trigger action if released within button bounds
+            if was_pressed and self._contains(pos, expand=4):
+                if self._debug_log:
+                    logger.debug(f"[BTN] activated label={self.label if isinstance(self.label, str) else self.label()} pos={pos} rect={self.rect}")
+                self.on_press()
+                self._flash_until = time.monotonic() + 0.15
+                return True
+            return was_pressed  # Return True if we were tracking this press
+
+        # Tap event: legacy support
+        if event.type == "tap":
+            if self._contains(pos, expand=4):
+                if self._debug_log:
+                    logger.debug(f"[BTN] hit label={self.label if isinstance(self.label, str) else self.label()} pos={pos} rect={self.rect}")
+                self.on_press()
+                self._flash_until = time.monotonic() + 0.15
+                return True
+            return False
+
         return False
 
     def _contains(self, pos: Tuple[int, int], expand: int = 0) -> bool:

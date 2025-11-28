@@ -60,6 +60,7 @@ class TouchController:
         self.press_time = 0.0
         self.last_x = 0
         self.last_y = 0
+        self.last_tap_time = 0.0  # For debouncing
 
         # Load gesture thresholds from config or use defaults
         if config:
@@ -67,11 +68,13 @@ class TouchController:
             self.tap_threshold_ms = thresholds.get("tap_threshold_ms", 300)
             self.drag_threshold_px = thresholds.get("drag_threshold_px", 10)
             self.swipe_threshold_px = thresholds.get("swipe_threshold_px", 48)
+            self.tap_debounce_ms = thresholds.get("tap_debounce_ms", 100)
         else:
             # Defaults tuned for responsiveness on resistive panels
             self.tap_threshold_ms = 300
             self.drag_threshold_px = 10
             self.swipe_threshold_px = 48
+            self.tap_debounce_ms = 100  # Prevent accidental double-taps
 
     def get_events(self, timeout: float = 0.0) -> List[TouchEvent]:
         """
@@ -196,7 +199,14 @@ class TouchController:
 
         # Determine gesture type
         if duration_ms < self.tap_threshold_ms and distance < self.drag_threshold_px:
+            # Tap debouncing: prevent rapid double-taps within debounce window
+            time_since_last_tap = (release_time - self.last_tap_time) * 1000
+            if time_since_last_tap < self.tap_debounce_ms:
+                logger.debug(f"[TOUCHCTRL] Tap debounced: {time_since_last_tap:.1f}ms since last tap")
+                return None
+
             # Tap gesture
+            self.last_tap_time = release_time
             return TouchEvent(
                 type="tap",
                 x=self.press_x,
