@@ -63,10 +63,14 @@ class ButtonWidget:
         if not pos:
             return False
 
+        label = self.label if isinstance(self.label, str) else self.label()
+
         # Press event: show immediate visual feedback
         if event.type == "press":
             if self._contains(pos, expand=4):
                 self._pressed = True
+                if self._debug_log:
+                    logger.debug(f"[BTN] '{label}' pressed at {pos}, rect={self.rect}")
                 return True
             return False
 
@@ -76,20 +80,27 @@ class ButtonWidget:
             was_in_bounds = self._contains(pos, expand=4)
             self._pressed = False  # Always clear pressed state
 
+            if self._debug_log:
+                logger.debug(f"[BTN] '{label}' had _pressed=True, {event.type} at {pos}, in_bounds={was_in_bounds}, rect={self.rect}")
+
             # If it was in bounds when pressed and still in bounds, trigger action
             if was_in_bounds and event.type in ("tap", "drag", "swipe"):
                 if self._debug_log:
-                    logger.debug(f"[BTN] activated via {event.type} label={self.label if isinstance(self.label, str) else self.label()} pos={pos} rect={self.rect}")
+                    logger.debug(f"[BTN] '{label}' activated via {event.type}")
                 self.on_press()
                 self._flash_until = time.monotonic() + 0.15
                 return True
-            return was_in_bounds  # Return True if we were tracking this
+            # Return False if dragged out of bounds to allow other buttons to check
+            # This prevents stuck buttons but allows mis-triggers if drag crosses buttons
+            if self._debug_log and not was_in_bounds:
+                logger.debug(f"[BTN] '{label}' drag out of bounds, allowing other buttons")
+            return False  # Changed from was_in_bounds to always False
 
         # Not pressed - handle tap as standalone event
         if event.type == "tap":
             if self._contains(pos, expand=4):
                 if self._debug_log:
-                    logger.debug(f"[BTN] tap label={self.label if isinstance(self.label, str) else self.label()} pos={pos} rect={self.rect}")
+                    logger.debug(f"[BTN] '{label}' standalone tap at {pos}")
                 self.on_press()
                 self._flash_until = time.monotonic() + 0.15
                 return True

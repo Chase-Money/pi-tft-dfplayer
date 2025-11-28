@@ -2,7 +2,12 @@
   "permissions": {
     "allow": [
       "Bash(/tmp/deploy_to_pi.sh)",
-      "Bash(/tmp/deploy_to_pi.sh kiosk)"
+      "Bash(/tmp/deploy_to_pi.sh kiosk)",
+      "Bash(chmod:*)",
+      "Bash(/tmp/deploy_to_pi.sh chase@192.168.1.122)",
+      "Bash(ssh:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []
