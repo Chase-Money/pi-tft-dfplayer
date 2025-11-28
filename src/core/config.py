@@ -1,5 +1,5 @@
 """
-ConfigV2: canonical configuration manager for the v2 application stack.
+Config: canonical configuration manager for the application stack.
 
 Provides thread-safe loading and saving of user preferences and system state
 to ~/.dfplayer_config.json with atomic writes and validation.

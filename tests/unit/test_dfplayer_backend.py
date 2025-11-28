@@ -115,8 +115,9 @@ def test_playback_controls_delegate_to_device(backend):
     assert device.next_calls == 1
     assert device.prev_calls == 1
     assert device.play_track_calls == [7]
-    assert backend_instance.current_track == 7
-    assert backend_instance.playing is True
+    # Track will be confirmed by 0x3E event; before that we only expect pending state
+    assert backend_instance.current_track is None
+    assert backend_instance.play_pending is True
 
 
 def test_poll_event_returns_enqueued_events(backend):

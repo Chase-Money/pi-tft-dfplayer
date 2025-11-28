@@ -160,6 +160,11 @@ class CalibrationScreen(ScreenView):
             med_y = int(statistics.median([s[1] for s in target_samples]))
             median_samples.append((med_x, med_y))
 
+        if len(median_samples) != 4:
+            app.set_status("Calibration failed: missing samples", "error", 4)
+            self.manager.pop()
+            return
+
         # Now compute calibration bounds from median samples (same as before)
         left_x = int(statistics.median([median_samples[0][0], median_samples[3][0]]))
         right_x = int(statistics.median([median_samples[1][0], median_samples[2][0]]))
@@ -193,6 +198,12 @@ class CalibrationScreen(ScreenView):
                 app.set_status("Calibration out of bounds; retry", "error", 4)
                 self.manager.pop()
                 return
+
+        # Final sanity to avoid inverted coordinates
+        if left_x >= right_x or top_y >= bottom_y:
+            app.set_status("Invalid calibration: please retry", "error", 4)
+            self.manager.pop()
+            return
 
         app.set_touch_calibration(left_x, right_x, top_y, bottom_y)
         app.set_status("Calibration saved", "success", 3)

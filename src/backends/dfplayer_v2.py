@@ -169,11 +169,9 @@ class DFPlayerBackend(PlaybackBackend):
         number = int(track_id)
         if self.device and self.device.is_connected:
             try:
+                self.device.play_track(number)
                 with self._state_lock:
                     self.play_pending = True  # Listener will set current_track and playing when 0x3E received
-                    self.playing = True
-                    self.current_track = number
-                self.device.play_track(number)
             except Exception as exc:
                 # Reset state on failure
                 self._reset_state_on_error(clear_track=True)
@@ -246,7 +244,7 @@ class DFPlayerBackend(PlaybackBackend):
         if self._listener_thread and self._listener_thread.is_alive():
             self._listener_thread.join(timeout=2.0)  # Keep shutdown responsive on embedded targets
             if self._listener_thread.is_alive():
-                logger.warning("Listener thread did not terminate within 10.0s timeout")
+                logger.warning("Listener thread did not terminate within 2.0s timeout")
         self._listener_thread = None
 
     def _listener_loop(self) -> None:
