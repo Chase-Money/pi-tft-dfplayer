@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from typing import Callable, List, Optional, Sequence, Tuple
 
@@ -9,6 +10,8 @@ from PIL import ImageDraw
 
 from .events import UIEvent
 from ..draw_utils import xywh_to_xyxy, clamp
+
+logger = logging.getLogger(__name__)
 
 
 Rect = Tuple[int, int, int, int]
