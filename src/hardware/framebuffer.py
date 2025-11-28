@@ -87,7 +87,7 @@ class Framebuffer:
         # Write row by row into mm at correct offset
         row_bytes = (x2 - x) * 2
         for row_idx, row in enumerate(range(y, y2)):
-            offset = (row * self.width + x) * 2
+            offset = int(row) * int(self.width) * 2 + int(x) * 2
             self.mm.seek(offset)
             self.mm.write(memoryview(buf[row_idx, :].tobytes()))
 

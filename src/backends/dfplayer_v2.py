@@ -52,10 +52,12 @@ class DFPlayerBackend(PlaybackBackend):
             # Validate device was created successfully
             if device is None:
                 logger.error("DFPlayer factory returned None")
+                serial_conn.close()
                 return False
 
             if not getattr(device, "is_connected", False):
                 logger.error("DFPlayer not connected")
+                serial_conn.close()
                 return False
 
             device.set_volume(self.volume_level)
@@ -71,6 +73,10 @@ class DFPlayerBackend(PlaybackBackend):
             logger.error(f"Failed to initialize DFPlayer backend: {exc}")
             # Clean up listener thread if it was started
             self._stop_listener()
+            try:
+                serial_conn.close()
+            except Exception:
+                pass
             with self._device_lock:
                 self.device = None
             return False
@@ -98,10 +104,10 @@ class DFPlayerBackend(PlaybackBackend):
     def play(self):
         if self.device and self.device.is_connected:
             try:
+                self.device.play()
                 with self._state_lock:
                     self.play_pending = True
                     self.playing = True
-                self.device.play()
             except Exception as exc:
                 self._reset_state_on_error()
                 logger.error(f"Failed to play: {exc}")
@@ -140,9 +146,9 @@ class DFPlayerBackend(PlaybackBackend):
     def next_track(self):
         if self.device and self.device.is_connected:
             try:
+                self.device.next_track()
                 with self._state_lock:
                     self.play_pending = True
-                self.device.next_track()
             except Exception as exc:
                 self._reset_state_on_error()
                 logger.error(f"Failed to skip to next track: {exc}")
@@ -151,9 +157,9 @@ class DFPlayerBackend(PlaybackBackend):
     def prev_track(self):
         if self.device and self.device.is_connected:
             try:
+                self.device.prev_track()
                 with self._state_lock:
                     self.play_pending = True
-                self.device.prev_track()
             except Exception as exc:
                 self._reset_state_on_error()
                 logger.error(f"Failed to skip to previous track: {exc}")
@@ -163,11 +169,11 @@ class DFPlayerBackend(PlaybackBackend):
         number = int(track_id)
         if self.device and self.device.is_connected:
             try:
-                self.device.play_track(number)
                 with self._state_lock:
                     self.play_pending = True  # Listener will set current_track and playing when 0x3E received
                     self.playing = True
                     self.current_track = number
+                self.device.play_track(number)
             except Exception as exc:
                 # Reset state on failure
                 self._reset_state_on_error(clear_track=True)
