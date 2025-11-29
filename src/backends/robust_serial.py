@@ -1,6 +1,11 @@
 """
 RobustSerial: wrapper around serial.Serial with auto-reconnect on errors.
 Intended for DFPlayer UART resilience.
+
+THREADING SAFETY:
+    This class uses blocking I/O and may block the calling thread during reconnection.
+    Best practice: Use from dedicated background threads for reads, minimize writes from main thread.
+    The reconnect_delay is kept minimal (50ms) to prevent UI freezes when called from main thread.
 """
 
 import logging
@@ -13,11 +18,11 @@ logger = logging.getLogger(__name__)
 
 
 class RobustSerial:
-    def __init__(self, device="/dev/serial0", baudrate=9600, timeout=0.1, reconnect_delay=0.5):
+    def __init__(self, device="/dev/serial0", baudrate=9600, timeout=0.1, reconnect_delay=0.05):
         self.device = device
         self.baudrate = baudrate
         self._timeout = timeout
-        self.reconnect_delay = reconnect_delay  # Reduced from 2.0s to 0.5s for real-time UI
+        self.reconnect_delay = reconnect_delay  # 50ms default - short enough to not freeze UI
         self.ser: Optional[serial.Serial] = None
         self._connect()
 

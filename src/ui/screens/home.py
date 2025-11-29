@@ -23,12 +23,13 @@ class HomeScreen(ScreenView):
     def __init__(self, manager, services=None):
         super().__init__(manager, services)
         self.buttons: List[ButtonWidget] = []
+        self._last_resolution = None
 
     def on_enter(self, **kwargs):
-        """Initialize screen - create buttons once based on current resolution."""
-        # Get screen dimensions from context (will be set by first render if not available)
+        """Initialize screen when shown."""
+        # Force button recreation on next render
+        self._last_resolution = None
         self.buttons = []
-        self._buttons_created = False
 
     def render(self, context: dict) -> None:
         image: Image.Image = context["image"]
@@ -51,8 +52,9 @@ class HomeScreen(ScreenView):
         # Starting Y position for buttons (below title)
         start_y = title_y + int(40 * scale)
 
-        # Create buttons only once (on first render)
-        if not self._buttons_created:
+        # Only recreate buttons if resolution changed (optimization while preventing state leakage)
+        current_res = (w, h)
+        if current_res != self._last_resolution:
             dbg = debug_tap_logging_enabled()
             self.buttons = [
                 ButtonWidget(
@@ -74,7 +76,7 @@ class HomeScreen(ScreenView):
                     debug_log=dbg,
                 ),
             ]
-            self._buttons_created = True
+            self._last_resolution = current_res
 
         # Draw status banner if present
         app = self._app()

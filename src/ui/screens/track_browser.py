@@ -61,8 +61,6 @@ class TrackBrowserScreen(ScreenView):
             self.back_button = ButtonWidget((margin, small_margin, back_w, button_h), "Back", self.manager.pop, debug_log=dbg)
             self._last_resolution = current_res
 
-        self.back_button = ButtonWidget((margin, small_margin, back_w, button_h), "Back", self.manager.pop, debug_log=debug_tap_logging_enabled())
-
         # Draw status banner
         app = self.services.get("app") if self.services else None
         if app:

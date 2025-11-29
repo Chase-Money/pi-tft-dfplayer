@@ -179,7 +179,12 @@ class DFPlayerBackend(PlaybackBackend):
                 raise
 
     def set_volume(self, volume: int):
-        volume = max(0, min(30, int(volume)))
+        try:
+            volume = max(0, min(30, int(volume)))
+        except (ValueError, TypeError) as exc:
+            logger.error(f"Invalid volume value: {volume!r} ({exc})")
+            return  # Ignore invalid input instead of crashing
+
         if self.device and self.device.is_connected:
             try:
                 self.device.set_volume(volume)
