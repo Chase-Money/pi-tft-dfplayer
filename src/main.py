@@ -12,7 +12,7 @@ from app_v2 import Application
 
 def main():
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.DEBUG,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
     try:
