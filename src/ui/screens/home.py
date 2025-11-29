@@ -97,6 +97,11 @@ class HomeScreen(ScreenView):
         pos = event.payload.get("pos") if event.payload else None
         x, y = pos if pos else (None, None)
 
+        # CRITICAL FIX: Clear all button pressed states on new press to prevent state leak
+        if event.type == "press":
+            for button in self.buttons:
+                button._pressed = False
+
         if event.type == "tap" and pos:
             logger.info(f"[HOME] Processing tap at ({x}, {y})")
             for i, button in enumerate(self.buttons):
