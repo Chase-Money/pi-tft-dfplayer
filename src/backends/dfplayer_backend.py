@@ -1,7 +1,7 @@
 """
 DEPRECATED: This module is deprecated and scheduled for removal.
 
-Use `src.backends.dfplayer_v2` instead. All functionality has been merged
+Use `src.backends.dfplayer` instead. All functionality has been merged
 into the canonical DFPlayer backend module.
 
 This file is kept temporarily for backward compatibility with tests.

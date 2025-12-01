@@ -6,7 +6,7 @@ and async event handling without exercising low-level serial packet logic.
 import queue
 import pytest
 
-from src.backends.dfplayer_v2 import DFPlayerBackend
+from src.backends.dfplayer import DFPlayerBackend
 
 
 class FakeDFPlayer:

@@ -9,13 +9,97 @@ import copy
 import json
 import logging
 import os
+import re
 import tempfile
 from pathlib import Path
 from threading import RLock
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from .orients import ORIENTS  # backwards compat
 
 logger = logging.getLogger(__name__)
+
+
+def _validate_path(path: str, allowed_prefixes: List[str]) -> Optional[str]:
+    """
+    Validate a file path to prevent directory traversal and restrict to allowed directories.
+
+    This function provides security against path traversal attacks by:
+    - Rejecting paths with ".." components
+    - Rejecting paths with suspicious characters
+    - Ensuring resolved paths start with one of the allowed prefixes
+    - Resolving symlinks to detect traversal attempts
+
+    Args:
+        path: Path to validate (can be relative or absolute)
+        allowed_prefixes: List of allowed directory prefixes (e.g., ["/boot/", "/home/pi/"])
+
+    Returns:
+        Validated absolute path if safe, None if path is rejected
+
+    Examples:
+        >>> _validate_path("/boot/metadata.json", ["/boot/"])
+        '/boot/metadata.json'
+        >>> _validate_path("../../../etc/passwd", ["/boot/"])
+        None
+        >>> _validate_path("/home/pi/../../../etc/shadow", ["/home/pi/"])
+        None
+    """
+    if not path or not isinstance(path, str):
+        return None
+
+    try:
+        # Reject paths with suspicious characters
+        suspicious_patterns = [
+            r'\x00',  # Null bytes
+            r'[\x01-\x1f]',  # Control characters
+        ]
+        for pattern in suspicious_patterns:
+            if re.search(pattern, path):
+                logger.warning(f"Path contains suspicious characters: {path}")
+                return None
+
+        # Resolve to absolute path (also resolves symlinks)
+        resolved_path = Path(path).resolve()
+        abs_path_str = str(resolved_path)
+
+        # Normalize allowed prefixes to absolute paths
+        normalized_prefixes = []
+        for prefix in allowed_prefixes:
+            try:
+                normalized_prefix = str(Path(prefix).resolve())
+                # Ensure prefix ends with separator for proper prefix matching
+                if not normalized_prefix.endswith(os.sep):
+                    normalized_prefix += os.sep
+                normalized_prefixes.append(normalized_prefix)
+            except Exception as e:
+                logger.error(f"Invalid allowed prefix {prefix}: {e}")
+                continue
+
+        if not normalized_prefixes:
+            logger.error("No valid allowed prefixes provided")
+            return None
+
+        # Check if resolved path starts with any allowed prefix
+        path_matches = False
+        for prefix in normalized_prefixes:
+            # Check if path is within prefix directory
+            if abs_path_str.startswith(prefix) or abs_path_str + os.sep == prefix:
+                path_matches = True
+                break
+
+        if not path_matches:
+            logger.warning(
+                f"Path outside allowed directories: {path} -> {abs_path_str}\n"
+                f"Allowed prefixes: {allowed_prefixes}"
+            )
+            return None
+
+        logger.debug(f"Path validated successfully: {path} -> {abs_path_str}")
+        return abs_path_str
+
+    except Exception as e:
+        logger.error(f"Error validating path {path}: {e}")
+        return None
 
 
 class Config:
@@ -31,11 +115,27 @@ class Config:
     """
 
     DEFAULT_CONFIG_PATH = Path.home() / ".dfplayer_config.json"
+
+    # Security: Allowed directories for file paths from environment variables
+    # This whitelist prevents path traversal attacks
+    ALLOWED_METADATA_PREFIXES = ["/boot/", "/home/pi/", str(Path.home())]
+    ALLOWED_ARTWORK_PREFIXES = ["/boot/", "/home/pi/", "/media/", "/mnt/", str(Path.home())]
+    ALLOWED_CATALOG_PREFIXES = ["/boot/", "/home/pi/", str(Path.home())]
     TOUCH_THRESHOLD_DEFAULTS = {
         "tap_threshold_ms": 400,  # Max time for tap (ms)
         "drag_threshold_px": 12,  # Min pixels for drag
         "swipe_threshold_px": 70,  # Min pixels for swipe (increased to reduce accidental swipes)
         "tap_debounce_ms": 100,  # Min time between taps to prevent double-tap (ms)
+    }
+
+    # Calibration screen defaults
+    # - Configurable to support different screen sizes and hardware constraints
+    # - Adaptive sizing scales based on screen dimensions for better UX on small displays
+    CALIBRATION_DEFAULTS = {
+        "target_offset_px": 40,      # Distance from screen edges for calibration targets
+        "samples_per_target": 3,     # Number of samples to collect per target for median filtering
+        "target_radius_px": 18,      # Visual radius of calibration target circles
+        "adaptive_sizing": True,     # Scale target offset based on screen size
     }
 
     DEFAULT_VALUES = {
@@ -54,6 +154,7 @@ class Config:
         },
         "touch_orientation_index": 6,
         "touch_thresholds": TOUCH_THRESHOLD_DEFAULTS,
+        "calibration": CALIBRATION_DEFAULTS,
         "ui_theme": "default",
         "screen_brightness": 100,
         "auto_play": False,
@@ -252,12 +353,26 @@ class Config:
         """
         Recursively merge override into base (dicts only; lists are replaced, not merged).
 
+        WARNING: This merge strategy does NOT merge lists - it replaces them entirely.
+        If the base config contains a list and the override also provides a value for
+        that key, the entire list from base is discarded and replaced with override's value.
+
+        Example demonstrating the limitation:
+            base = {"features": ["feature_a", "feature_b"], "settings": {"theme": "dark"}}
+            override = {"features": ["feature_c"], "settings": {"volume": 20}}
+            result = {"features": ["feature_c"], "settings": {"theme": "dark", "volume": 20}}
+            # Note: "feature_a" and "feature_b" are lost
+
+        For more sophisticated list merging (append, prepend, deduplicate), consider
+        using a library like `deepmerge` or implementing custom merge logic.
+
         Args:
             base: Base dictionary
             override: Override dictionary
 
         Returns:
-            Merged dictionary
+            Merged dictionary where nested dicts are recursively merged,
+            but all other types (including lists) are replaced
         """
         merged = base.copy()
         for key, value in override.items():
@@ -366,25 +481,91 @@ class Config:
         self.set("touch_orientation_index", int(index))
 
     def get_metadata_path(self) -> Optional[str]:
-        """Get metadata file path with env override."""
+        """
+        Get metadata file path with env override and security validation.
+
+        Returns:
+            Validated metadata file path, or None if validation fails
+        """
         env_path = os.environ.get("DFPLAYER_METADATA")
         if env_path:
-            return env_path
-        return self.get("paths", {}).get("metadata", self.DEFAULT_VALUES["paths"]["metadata"])
+            validated = _validate_path(env_path, self.ALLOWED_METADATA_PREFIXES)
+            if validated:
+                return validated
+            else:
+                logger.error(
+                    f"DFPLAYER_METADATA environment variable rejected: {env_path}\n"
+                    f"Path must be within: {self.ALLOWED_METADATA_PREFIXES}"
+                )
+                # Fall through to config file path
+
+        config_path = self.get("paths", {}).get("metadata", self.DEFAULT_VALUES["paths"]["metadata"])
+        if config_path:
+            validated = _validate_path(config_path, self.ALLOWED_METADATA_PREFIXES)
+            if validated:
+                return validated
+            else:
+                logger.warning(f"Config metadata path rejected: {config_path}")
+                return None
+        return None
 
     def get_artwork_root(self) -> Optional[str]:
-        """Get artwork root directory with env override."""
+        """
+        Get artwork root directory with env override and security validation.
+
+        Returns:
+            Validated artwork root directory path, or None if validation fails
+        """
         env_path = os.environ.get("DFPLAYER_ART_ROOT")
         if env_path:
-            return env_path
-        return self.get("paths", {}).get("artwork_root", None)
+            validated = _validate_path(env_path, self.ALLOWED_ARTWORK_PREFIXES)
+            if validated:
+                return validated
+            else:
+                logger.error(
+                    f"DFPLAYER_ART_ROOT environment variable rejected: {env_path}\n"
+                    f"Path must be within: {self.ALLOWED_ARTWORK_PREFIXES}"
+                )
+                # Fall through to config file path
+
+        config_path = self.get("paths", {}).get("artwork_root", None)
+        if config_path:
+            validated = _validate_path(config_path, self.ALLOWED_ARTWORK_PREFIXES)
+            if validated:
+                return validated
+            else:
+                logger.warning(f"Config artwork root rejected: {config_path}")
+                return None
+        return None
 
     def get_track_catalog_path(self) -> Optional[str]:
-        """Get track catalog file path with env override."""
+        """
+        Get track catalog file path with env override and security validation.
+
+        Returns:
+            Validated track catalog file path, or None if validation fails
+        """
         env_path = os.environ.get("DFPLAYER_TRACK_CATALOG")
         if env_path:
-            return env_path
-        return self.get("paths", {}).get("track_catalog", None)
+            validated = _validate_path(env_path, self.ALLOWED_CATALOG_PREFIXES)
+            if validated:
+                return validated
+            else:
+                logger.error(
+                    f"DFPLAYER_TRACK_CATALOG environment variable rejected: {env_path}\n"
+                    f"Path must be within: {self.ALLOWED_CATALOG_PREFIXES}"
+                )
+                # Fall through to config file path
+
+        config_path = self.get("paths", {}).get("track_catalog", None)
+        if config_path:
+            validated = _validate_path(config_path, self.ALLOWED_CATALOG_PREFIXES)
+            if validated:
+                return validated
+            else:
+                logger.warning(f"Config track catalog rejected: {config_path}")
+                return None
+        return None
 
     def get_touch_thresholds(self) -> Dict[str, int]:
         """Get touch gesture threshold parameters."""

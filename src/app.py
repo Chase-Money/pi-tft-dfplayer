@@ -12,7 +12,7 @@ from utils.track_catalog import load_track_catalog
 from utils.metadata import load_metadata
 from hardware.framebuffer import Framebuffer
 from hardware.touch_controller import TouchController
-from backends.dfplayer_v2 import DFPlayerBackend
+from backends.dfplayer import DFPlayerBackend
 from ui.framework.manager import ScreenManagerV2
 from ui.framework.events import UIEvent
 from ui.renderer import FramebufferRendererV2
