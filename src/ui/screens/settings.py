@@ -25,7 +25,12 @@ class SettingsScreen(ScreenView):
         self._last_resolution = None
 
     def on_enter(self, **kwargs):
-        self._orientation_idx = 0  # Stub: orientation not yet implemented in v2
+        # Load current orientation index from config
+        app = self._app()
+        if app and hasattr(app, "config"):
+            self._orientation_idx = app.config.get_touch_orientation_index()
+        else:
+            self._orientation_idx = 0
         self._last_resolution = None
 
     def render(self, context: dict) -> None:
