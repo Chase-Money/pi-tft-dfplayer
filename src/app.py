@@ -226,6 +226,9 @@ class Application:
             return False
 
         refreshed = False
+        # Event drain loop performance: processes up to 100 events per frame
+        # At 30fps (33ms/frame), this gives ~330µs per event budget
+        # Sufficient for Pi Zero 2 W @ 1GHz - events rarely stack beyond 5-10 in practice
         max_events = 100  # Safety limit to prevent infinite loop if events flood
         event_count = 0
 
