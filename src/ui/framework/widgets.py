@@ -68,45 +68,27 @@ class ButtonWidget:
 
         label = self.label if isinstance(self.label, str) else self.label()
 
-        # Press event: show immediate visual feedback
+        # Press event: trigger action immediately for responsive UI
+        # This prevents double-triggers from press+tap and eliminates delay
         if event.type == "press":
             if self._contains(pos, expand=4):
                 self._pressed = True
                 if self._debug_log:
                     logger.debug(f"[BTN] '{label}' pressed at {pos}, rect={self.rect}")
+                # Trigger action immediately on press for instant feedback
+                self.on_press()
+                self._flash_until = time.monotonic() + 0.15
                 return True
             return False
 
-        # For any other event type, if we're pressed and it's in bounds, trigger action
-        # This handles the case where touch releases become swipe/drag events
+        # Release/tap/drag events: only for visual feedback (clearing pressed state)
+        # Action already fired on press, so just clean up state
         if self._pressed:
-            was_in_bounds = self._contains(pos, expand=4)
-            self._pressed = False  # Always clear pressed state
-
+            self._pressed = False  # Clear pressed state
             if self._debug_log:
-                logger.debug(f"[BTN] '{label}' had _pressed=True, {event.type} at {pos}, in_bounds={was_in_bounds}, rect={self.rect}")
-
-            # If it was in bounds when pressed and still in bounds, trigger action
-            if was_in_bounds and event.type in ("tap", "drag", "swipe"):
-                if self._debug_log:
-                    logger.debug(f"[BTN] '{label}' activated via {event.type}")
-                self.on_press()
-                self._flash_until = time.monotonic() + 0.15
-                return True
-            # Return False if dragged out of bounds to allow other buttons to check
-            # This prevents stuck buttons but allows mis-triggers if drag crosses buttons
-            if self._debug_log and not was_in_bounds:
-                logger.debug(f"[BTN] '{label}' drag out of bounds, allowing other buttons")
-            return False  # Changed from was_in_bounds to always False
-
-        # Not pressed - handle tap as standalone event
-        if event.type == "tap":
-            if self._contains(pos, expand=4):
-                if self._debug_log:
-                    logger.debug(f"[BTN] '{label}' standalone tap at {pos}")
-                self.on_press()
-                self._flash_until = time.monotonic() + 0.15
-                return True
+                logger.debug(f"[BTN] '{label}' clearing _pressed on {event.type} at {pos}")
+            # Return True to consume event and prevent propagation
+            return True
 
         return False
 
