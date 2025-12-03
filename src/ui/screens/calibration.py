@@ -153,13 +153,39 @@ class CalibrationScreen(ScreenView):
     # ------------------------------------------------------------------
     def _finalize(self) -> None:
         app = self._app()
-        # Compute median of each target's samples
+        # Get hardware bounds for validation
+        bounds = app.get_touch_driver_bounds() if hasattr(app, "get_touch_driver_bounds") else None
+        NOISE_THRESHOLD = 50  # Filter samples near hardware minimum (spurious readings)
+
+        # Compute median of each target's samples, filtering invalid ones
         median_samples = []
         for target_samples in self.samples:
             if not target_samples:
                 continue
-            med_x = int(statistics.median([s[0] for s in target_samples]))
-            med_y = int(statistics.median([s[1] for s in target_samples]))
+
+            # Filter out samples near hardware minimum bounds (noise)
+            valid_samples = []
+            for raw_x, raw_y in target_samples:
+                if bounds:
+                    min_x, max_x, min_y, max_y = bounds
+                    # Reject samples too close to hardware minimum (spurious readings)
+                    if raw_x <= min_x + NOISE_THRESHOLD or raw_y <= min_y + NOISE_THRESHOLD:
+                        continue
+                    # Reject samples outside hardware bounds
+                    if not (min_x <= raw_x <= max_x and min_y <= raw_y <= max_y):
+                        continue
+                valid_samples.append((raw_x, raw_y))
+
+            # Need at least half the samples to be valid
+            if len(valid_samples) < len(target_samples) // 2:
+                app.set_status("Too many invalid samples; retry calibration", "error", 4)
+                self.manager.pop()
+                return
+
+            # Use valid samples (or all if no bounds check)
+            samples_to_use = valid_samples if valid_samples else target_samples
+            med_x = int(statistics.median([s[0] for s in samples_to_use]))
+            med_y = int(statistics.median([s[1] for s in samples_to_use]))
             median_samples.append((med_x, med_y))
 
         if len(median_samples) != 4:

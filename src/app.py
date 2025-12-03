@@ -28,6 +28,10 @@ logger = logging.getLogger(__name__)
 class Application:
     """Unified touchscreen application built on the ScreenManagerV2 stack."""
 
+    # Performance constants
+    TARGET_FPS = 30  # Target frame rate for UI rendering
+    MAX_EVENTS_PER_FRAME = 100  # Safety limit for backend event processing
+
     def __init__(self, config=None) -> None:
         self.config: Config = config or Config()
         self.config.load()
@@ -136,8 +140,8 @@ class Application:
             logger.warning("Touch input unavailable; rendered one frame")
             return
 
-        # Frame rate limiting: target 30fps (33.3ms per frame)
-        frame_time = 1.0 / 30.0
+        # Frame rate limiting: target frames per second (33.3ms per frame at 30fps)
+        frame_time = 1.0 / self.TARGET_FPS
         next_frame_time = time.monotonic()
 
         while self.running:
@@ -226,13 +230,12 @@ class Application:
             return False
 
         refreshed = False
-        # Event drain loop performance: processes up to 100 events per frame
+        # Event drain loop performance: processes up to MAX_EVENTS_PER_FRAME events per frame
         # At 30fps (33ms/frame), this gives ~330µs per event budget
         # Sufficient for Pi Zero 2 W @ 1GHz - events rarely stack beyond 5-10 in practice
-        max_events = 100  # Safety limit to prevent infinite loop if events flood
         event_count = 0
 
-        while event_count < max_events:
+        while event_count < self.MAX_EVENTS_PER_FRAME:
             event = self.backend.poll_event(timeout=0)
             if not event:
                 break
@@ -259,8 +262,8 @@ class Application:
                 code = event.get("code")
                 logger.error("DFPlayer error 0x%02x", code if isinstance(code, int) else 0)
 
-        if event_count >= max_events:
-            logger.warning(f"Event drain limit reached ({max_events} events), some events may be pending")
+        if event_count >= self.MAX_EVENTS_PER_FRAME:
+            logger.warning(f"Event drain limit reached ({self.MAX_EVENTS_PER_FRAME} events), some events may be pending")
 
         return refreshed
 
