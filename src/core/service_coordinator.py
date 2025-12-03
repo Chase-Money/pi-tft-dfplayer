@@ -64,4 +64,5 @@ class ServiceCoordinator:
         elif name == "framebuffer":
             self.framebuffer = service
         elif name == "touch_controller":
+        elif name == "touch_controller":
             self.touch_controller = service
