@@ -2,6 +2,18 @@
 Touch controller wrapper for V2 framework integration.
 
 Provides event-based touch handling compatible with the UI framework.
+
+THREADING SAFETY:
+    This class is NOT thread-safe. All methods (especially get_events()) modify
+    instance variables without locking. This is intentional for performance and
+    simplicity - TouchController MUST be used from a single thread only.
+
+    Current usage: Main UI loop thread reads touch events at ~30fps
+    Risk: LOW - single-threaded usage pattern
+
+    If multi-threaded access is needed in the future, add a threading.Lock
+    around all methods that access _last_x, _last_y, _press_start_x, _press_start_y,
+    _press_start_time, and _touch_down_time.
 """
 
 import logging

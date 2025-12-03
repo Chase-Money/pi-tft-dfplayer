@@ -2,10 +2,13 @@
 Framebuffer handling for the DFPlayer GUI.
 """
 
+import logging
 import os
 import mmap
 import numpy as np
 from PIL import Image
+
+logger = logging.getLogger(__name__)
 
 class Framebuffer:
     def __init__(self, device="/dev/fb1"):
@@ -92,14 +95,36 @@ class Framebuffer:
             self.mm.write(memoryview(buf[row_idx, :].tobytes()))
 
     def close(self):
-        """Close the framebuffer resources."""
+        """Close the framebuffer resources.
+
+        Logs errors during cleanup but does not raise to allow shutdown to proceed.
+        """
+        errors = []
+
+        # Close mmap
         try:
             if hasattr(self, "mm") and self.mm and not self.mm.closed:
                 self.mm.close()
-        except Exception:
-            pass
+        except Exception as e:
+            errors.append(f"mmap close: {e}")
+            logger.error(f"Error closing framebuffer mmap: {e}")
+
+        # Close file
         try:
             if hasattr(self, "fb_file") and self.fb_file and not self.fb_file.closed:
                 self.fb_file.close()
-        except Exception:
-            pass
+        except Exception as e:
+            errors.append(f"file close: {e}")
+            logger.error(f"Error closing framebuffer file: {e}")
+
+        if errors:
+            logger.warning(f"Framebuffer cleanup encountered {len(errors)} error(s)")
+
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - ensures cleanup."""
+        self.close()
+        return False  # Don't suppress exceptions
