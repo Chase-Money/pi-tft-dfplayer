@@ -123,4 +123,5 @@ class TestEventProcessor:
         assert ui_event is not None
         assert ui_event.type == "tap"
         assert ui_event.payload["pos"] == (None, None)
+        assert ui_event.payload["pos"] == (None, None)
         assert ui_event.payload["raw"] is None
