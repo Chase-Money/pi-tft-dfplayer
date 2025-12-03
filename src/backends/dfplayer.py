@@ -102,81 +102,87 @@ class DFPlayerBackend(PlaybackBackend):
 
     # Controls ------------------------------------------------------
     def play(self):
-        if self.device and self.device.is_connected:
-            try:
-                self.device.play()
-                with self._state_lock:
-                    self.play_pending = True
-                    self.playing = True
-            except Exception as exc:
-                self._reset_state_on_error()
-                logger.error(f"Failed to play: {exc}")
-                raise
+        with self._device_lock:
+            if self.device and self.device.is_connected:
+                try:
+                    self.device.play()
+                    with self._state_lock:
+                        self.play_pending = True
+                        self.playing = True
+                except Exception as exc:
+                    self._reset_state_on_error()
+                    logger.error(f"Failed to play: {exc}")
+                    raise
 
     def resume(self):
         """Alias for play() to match existing UI expectations."""
         self.play()
 
     def pause(self):
-        if self.device and self.device.is_connected:
-            try:
-                self.device.pause()
-                with self._state_lock:
-                    self.playing = False
-                    self.play_pending = False
-            except Exception as exc:
-                # State already False, no need to reset
-                logger.error(f"Failed to pause: {exc}")
-                raise
+        with self._device_lock:
+            if self.device and self.device.is_connected:
+                try:
+                    self.device.pause()
+                    with self._state_lock:
+                        self.playing = False
+                        self.play_pending = False
+                except Exception as exc:
+                    # State already False, no need to reset
+                    logger.error(f"Failed to pause: {exc}")
+                    raise
 
     def stop(self):
-        if self.device and self.device.is_connected:
-            try:
-                self.device.stop()
-                with self._state_lock:
-                    self.playing = False
-                    self.play_pending = False
-                    self.current_track = None
-            except Exception as exc:
-                # Ensure consistent state on failure
-                self._reset_state_on_error(clear_track=True)
-                logger.error(f"Failed to stop: {exc}")
-                raise
+        with self._device_lock:
+            if self.device and self.device.is_connected:
+                try:
+                    self.device.stop()
+                    with self._state_lock:
+                        self.playing = False
+                        self.play_pending = False
+                        self.current_track = None
+                except Exception as exc:
+                    # Ensure consistent state on failure
+                    self._reset_state_on_error(clear_track=True)
+                    logger.error(f"Failed to stop: {exc}")
+                    raise
 
     def next_track(self):
-        if self.device and self.device.is_connected:
-            try:
-                self.device.next_track()
-                with self._state_lock:
-                    self.play_pending = True
-            except Exception as exc:
-                self._reset_state_on_error()
-                logger.error(f"Failed to skip to next track: {exc}")
-                raise
+        with self._device_lock:
+            if self.device and self.device.is_connected:
+                try:
+                    self.device.next_track()
+                    with self._state_lock:
+                        self.play_pending = True
+                except Exception as exc:
+                    self._reset_state_on_error()
+                    logger.error(f"Failed to skip to next track: {exc}")
+                    raise
 
     def prev_track(self):
-        if self.device and self.device.is_connected:
-            try:
-                self.device.prev_track()
-                with self._state_lock:
-                    self.play_pending = True
-            except Exception as exc:
-                self._reset_state_on_error()
-                logger.error(f"Failed to skip to previous track: {exc}")
-                raise
+        with self._device_lock:
+            if self.device and self.device.is_connected:
+                try:
+                    self.device.prev_track()
+                    with self._state_lock:
+                        self.play_pending = True
+                except Exception as exc:
+                    self._reset_state_on_error()
+                    logger.error(f"Failed to skip to previous track: {exc}")
+                    raise
 
     def play_track(self, track_id: Any):
         number = int(track_id)
-        if self.device and self.device.is_connected:
-            try:
-                self.device.play_track(number)
-                with self._state_lock:
-                    self.play_pending = True  # Listener will set current_track and playing when 0x3E received
-            except Exception as exc:
-                # Reset state on failure
-                self._reset_state_on_error(clear_track=True)
-                logger.error(f"Failed to play track {number}: {exc}")
-                raise
+        with self._device_lock:
+            if self.device and self.device.is_connected:
+                try:
+                    self.device.play_track(number)
+                    with self._state_lock:
+                        self.play_pending = True  # Listener will set current_track and playing when 0x3E received
+                except Exception as exc:
+                    # Reset state on failure
+                    self._reset_state_on_error(clear_track=True)
+                    logger.error(f"Failed to play track {number}: {exc}")
+                    raise
 
     def set_volume(self, volume: int):
         try:
@@ -185,17 +191,18 @@ class DFPlayerBackend(PlaybackBackend):
             logger.error(f"Invalid volume value: {volume!r} ({exc})")
             return  # Ignore invalid input instead of crashing
 
-        if self.device and self.device.is_connected:
-            try:
-                self.device.set_volume(volume)
+        with self._device_lock:
+            if self.device and self.device.is_connected:
+                try:
+                    self.device.set_volume(volume)
+                    with self._state_lock:
+                        self.volume_level = volume  # Update state only after successful hardware call
+                except Exception as exc:
+                    logger.error(f"Failed to set volume: {exc}")
+            else:
+                # No device connected, just update cached value
                 with self._state_lock:
-                    self.volume_level = volume  # Update state only after successful hardware call
-            except Exception as exc:
-                logger.error(f"Failed to set volume: {exc}")
-        else:
-            # No device connected, just update cached value
-            with self._state_lock:
-                self.volume_level = volume
+                    self.volume_level = volume
 
     # Status --------------------------------------------------------
     def get_status(self) -> Dict[str, Any]:
@@ -280,19 +287,19 @@ class DFPlayerBackend(PlaybackBackend):
             cmd = response[3]
             try:
                 if cmd == 0x3D:
-                    # Update state BEFORE enqueueing to prevent race condition
+                    # Enqueue event BEFORE updating state to prevent UI seeing state change without event
+                    self._event_queue.put({"type": "track_finished"}, block=False)
                     with self._state_lock:
                         self.playing = False
                         self.play_pending = False
-                    self._event_queue.put({"type": "track_finished"}, block=False)
                 elif cmd == 0x3E:
                     track_num = (response[5] << 8) | response[6]
-                    # Update state BEFORE enqueueing to prevent race condition
+                    # Enqueue event BEFORE updating state to prevent UI seeing state change without event
+                    self._event_queue.put({"type": "track_started", "track": track_num}, block=False)
                     with self._state_lock:
                         self.current_track = track_num  # Set current_track based on hardware feedback
                         self.playing = True
                         self.play_pending = False
-                    self._event_queue.put({"type": "track_started", "track": track_num}, block=False)
                 elif cmd == 0x40:
                     self._event_queue.put({"type": "error", "code": response[6]}, block=False)
             except queue.Full:

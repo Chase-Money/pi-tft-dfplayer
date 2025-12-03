@@ -68,27 +68,42 @@ class ButtonWidget:
 
         label = self.label if isinstance(self.label, str) else self.label()
 
-        # Press event: trigger action immediately for responsive UI
-        # This prevents double-triggers from press+tap and eliminates delay
+        # Press event: show visual feedback only (don't trigger action yet)
+        # This allows user to cancel by dragging away before release
         if event.type == "press":
             if self._contains(pos, expand=4):
                 self._pressed = True
                 if self._debug_log:
                     logger.debug(f"[BTN] '{label}' pressed at {pos}, rect={self.rect}")
-                # Trigger action immediately on press for instant feedback
-                self.on_press()
-                self._flash_until = time.monotonic() + 0.15
                 return True
             return False
 
-        # Release/tap/drag events: only for visual feedback (clearing pressed state)
-        # Action already fired on press, so just clean up state
-        if self._pressed:
-            self._pressed = False  # Clear pressed state
-            if self._debug_log:
-                logger.debug(f"[BTN] '{label}' clearing _pressed on {event.type} at {pos}")
-            # Return True to consume event and prevent propagation
-            return True
+        # Drag event: cancel if user drags outside button bounds
+        if event.type == "drag":
+            if self._pressed and not self._contains(pos, expand=4):
+                self._pressed = False  # Cancel press if drag goes outside
+                if self._debug_log:
+                    logger.debug(f"[BTN] '{label}' press cancelled by drag outside bounds at {pos}")
+                return True
+            return self._pressed  # Consume drag events while pressed
+
+        # Tap/release events: trigger action only if still pressed and in bounds
+        if event.type in ("tap", "release"):
+            if self._pressed:
+                self._pressed = False
+                if self._contains(pos, expand=4):
+                    # User released inside button - trigger action
+                    if self._debug_log:
+                        logger.debug(f"[BTN] '{label}' activated on {event.type} at {pos}, rect={self.rect}")
+                    self.on_press()
+                    self._flash_until = time.monotonic() + 0.15
+                    return True
+                else:
+                    # User released outside button - cancel action
+                    if self._debug_log:
+                        logger.debug(f"[BTN] '{label}' press cancelled by {event.type} outside bounds at {pos}")
+                    return True
+            return False
 
         return False
 

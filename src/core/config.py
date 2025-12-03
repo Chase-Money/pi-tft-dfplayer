@@ -603,17 +603,26 @@ class Config:
 
 # Singleton instance for global access
 _config_instance: Optional[Config] = None
+_config_lock = RLock()  # Lock for thread-safe singleton initialization
 
 
 def get_config() -> Config:
     """
     Get the global configuration instance.
 
+    Uses double-checked locking pattern for thread-safe singleton initialization.
+
     Returns:
         Config singleton instance
     """
     global _config_instance
+
+    # First check without lock (optimization)
     if _config_instance is None:
-        _config_instance = Config()
-        _config_instance.load()
+        with _config_lock:
+            # Second check with lock (thread-safe)
+            if _config_instance is None:
+                _config_instance = Config()
+                _config_instance.load()
+
     return _config_instance
