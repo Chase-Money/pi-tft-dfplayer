@@ -31,7 +31,7 @@ except Exception:  # pragma: no cover - fallback if v3 not available
     from core.profile_select_v2 import detect_profile, select_hardware, import_by_path  # type: ignore
 from utils.metadata import load_metadata, ArtworkCache
 from utils.track_catalog import load_track_catalog
-from backends.dfplayer_v2 import DFPlayerBackend as DFPlayerBackendV2
+from backends.dfplayer_backend import DFPlayerBackend as DFPlayerBackendV2
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -174,7 +174,7 @@ class DFPlayerAppV2:
     def _draw_128(self) -> None:
         if not PIL_AVAILABLE:
             return
-        from ui.views_v2 import (
+        from ui.views import (
             draw_play_indicator,
             draw_track_number,
             draw_artwork_panel,

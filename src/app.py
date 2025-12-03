@@ -31,6 +31,7 @@ class Application:
     # Performance constants
     TARGET_FPS = 30  # Target frame rate for UI rendering
     MAX_EVENTS_PER_FRAME = 100  # Safety limit for backend event processing
+    WATCHDOG_INTERVAL = 30.0  # Watchdog heartbeat interval in seconds
 
     def __init__(self, config=None) -> None:
         self.config: Config = config or Config()
@@ -96,6 +97,10 @@ class Application:
         # Track dropped events for UI warnings
         self._last_dropped_count = 0
         self._last_drop_warn_ts = 0.0
+
+        # Watchdog for freeze detection
+        self._last_watchdog_time = 0.0
+        self._frame_count = 0
 
         atexit.register(self.cleanup)
 
@@ -189,6 +194,14 @@ class Application:
             else:
                 # We're behind; catch up without drifting
                 next_frame_time = now + frame_time
+
+            # Watchdog heartbeat: log periodic status to detect freezes
+            self._frame_count += 1
+            if now - self._last_watchdog_time >= self.WATCHDOG_INTERVAL:
+                fps = self._frame_count / (now - self._last_watchdog_time) if self._last_watchdog_time > 0 else 0
+                logger.info(f"[WATCHDOG] Heartbeat: {self._frame_count} frames in {now - self._last_watchdog_time:.1f}s (avg {fps:.1f} fps)")
+                self._frame_count = 0
+                self._last_watchdog_time = now
 
     def _touch_to_ui_event(self, touch_event) -> Optional[UIEvent]:
         event_type = getattr(touch_event, "type", None)

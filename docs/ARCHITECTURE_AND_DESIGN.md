@@ -5,7 +5,7 @@ This document consolidates all architectural design, implementation planning, an
 ## System Architecture Overview
 
 ### Current Architecture (v2 Framework)
-- **Entry Point**: `src/main.py` (uses app_v2 + ConfigV2 + TouchController + ScreenManagerV2)
+- **Entry Point**: `src/main.py` (uses app.Application + Config + TouchController + ScreenManagerV2)
 - **Hardware Boundaries**: Framebuffer, touch, DFPlayer in `src/hardware/` and `src/backends/`, UI in `src/ui/`
 - **Unified Framework**: ScreenManagerV2 + FramebufferRendererV2 + AppState/Config v2
 

@@ -600,6 +600,17 @@ class Config:
         """Set last played track number."""
         self.set("last_track", max(1, track_number))
 
+    # Typed config bridge -------------------------------------------------
+    def to_application_config(self):
+        """Return structured ApplicationConfig built from this Config."""
+        from .application_config import ApplicationConfig  # Lazy import to avoid cycle
+
+        return ApplicationConfig.from_legacy(self)
+
+    def apply_application_config(self, app_cfg):
+        """Persist a structured ApplicationConfig back into this Config."""
+        app_cfg.apply_to_legacy(self)
+
 
 # Singleton instance for global access
 _config_instance: Optional[Config] = None

@@ -2,7 +2,7 @@
 
 ## Overview
 
-This test suite validates critical fixes to `dfplayer_fb_gui.py` following Test-Driven Development (TDD) principles. Tests verify resource cleanup, error handling, code quality, and elimination of code duplication.
+This test suite validates legacy `dfplayer_fb_gui` fixes following Test-Driven Development (TDD) principles. These legacy tests remain only for historical reference; the runtime now uses `src/main.py` + `src/app.py`.
 
 ## Test Structure
 

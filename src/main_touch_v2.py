@@ -31,7 +31,8 @@ def bootstrap_aliases() -> dict:
 
     cal_proxy = _lazy_proxy('src.utils.calibration')
     cat_proxy = _lazy_proxy('src.utils.track_catalog')
-    be_proxy = _lazy_proxy('src.backends.dfplayer_v2')
+    # Legacy alias kept for tests; point to maintained backend
+    be_proxy = _lazy_proxy('src.backends.dfplayer')
 
     sys.modules['utils.calibration'] = cal_proxy
     sys.modules['utils.track_catalog'] = cat_proxy

@@ -8,7 +8,7 @@ import os
 from unittest.mock import Mock, patch, MagicMock, call
 import atexit
 
-# Add src to path
+# Add src to path (legacy tests for dfplayer_fb_gui; kept for historical reference)
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 

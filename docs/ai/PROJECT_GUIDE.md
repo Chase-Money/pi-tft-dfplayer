@@ -3,9 +3,9 @@
 Single reference for agents and devs. Always read this and `CODING_STANDARDS.md` before working.
 
 ## Current Architecture Direction
-- Unify on the v2 framework: ScreenManagerV2 + FramebufferRendererV2 + AppState/Config v2.
+- Unify on the v2 framework: ScreenManagerV2 + FramebufferRendererV2 + AppState/Config.
 - No new `_v2` file forks; all changes go into the unified modules under `src/`.
-- Entry point: `src/main.py` (uses app_v2 + ConfigV2 + TouchController + ScreenManagerV2).
+- Entry point: `src/main.py` (uses `app.Application` + `Config`/`ApplicationConfig` + TouchController + ScreenManagerV2).
 - Hardware boundaries: keep framebuffer, touch, DFPlayer in `src/hardware/` and `src/backends/`, UI in `src/ui/`.
 
 ## Refactoring Plan (snapshot)
@@ -21,13 +21,12 @@ Single reference for agents and devs. Always read this and `CODING_STANDARDS.md`
 ### ✅ Completed Tasks
 
 1.  **Consolidate Versioned Files:**
-    *   ✅ Removed legacy files: `src/dfplayer_fb_gui.py`, `src/core/profile_select_v2.py`, `src/core/state_v2.py`
+    *   ✅ Removed legacy files: `src/dfplayer_fb_gui.py`, `src/core/state_v2.py`
     *   ✅ Archived `src/ui/screen.py` and components to `archive/` (already done)
     *   ✅ Renamed adopted files:
-        *   `src/core/config_v2.py` → `src/core/config.py`
+        *   `src/core/config_v2.py` → `src/core/config.py` (with typed `ApplicationConfig` facade)
         *   `src/core/profile_select_v3.py` → `src/core/hardware_profile.py`
         *   `src/app_v2.py` → `src/app.py`
-        *   `src/backends/dfplayer_v2.py` → `src/backends/dfplayer.py`
 
 2.  **Refactor DFPlayer Backend:**
     *   ✅ Eliminated duplication - uses `src/hardware/dfplayer.DFPlayer` for low-level communication
