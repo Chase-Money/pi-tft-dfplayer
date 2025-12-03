@@ -7,6 +7,8 @@ import time
 from typing import Dict, List, Optional, Tuple
 
 from core.config import Config
+from core.application_config import ApplicationConfig
+from core.runtime_state import RuntimeState
 from core.state import get_state
 from utils.track_catalog import load_track_catalog
 from utils.metadata import load_metadata
@@ -36,6 +38,9 @@ class Application:
     def __init__(self, config=None) -> None:
         self.config: Config = config or Config()
         self.config.load()
+        self.app_config = self.config.to_application_config()
+        self.runtime_state = RuntimeState()
+        self.runtime_state.hydrate_from_config(self.app_config)
 
         try:
             self.framebuffer = Framebuffer()
@@ -47,11 +52,11 @@ class Application:
             self.touch_controller = TouchController(config=self.config)
             # Load and apply calibration and orientation from config
             if self.touch_controller:
-                cal = self.config.get_touch_calibration()
+                cal = self.app_config.touch.calibration
                 self.touch_controller.set_calibration(
                     cal["min_x"], cal["max_x"], cal["min_y"], cal["max_y"]
                 )
-                orient = self.config.get_touch_orientation()
+                orient = self.app_config.touch.orientation
                 self.touch_controller.set_orientation(
                     swap_xy=orient["swap_xy"],
                     flip_x=orient["flip_x"],
@@ -69,7 +74,7 @@ class Application:
             logger.warning("DFPlayer backend failed to initialize; UI will run in demo mode")
             self.backend = None
         else:
-            volume = self.config.get_volume()
+            volume = self.app_config.audio.volume
             self.state.set_volume(volume)
             self.backend.set_volume(volume)
 
@@ -79,6 +84,8 @@ class Application:
             "state": self.state,
             "backend": self.backend,
             "config": self.config,
+            "app_config": self.app_config,
+            "runtime_state": self.runtime_state,
             "app": self,
             "renderer": None,
         }
@@ -105,13 +112,14 @@ class Application:
         atexit.register(self.cleanup)
 
     def _load_tracks_and_metadata(self) -> None:
-        catalog = load_track_catalog(self.config.get_track_catalog_path())
+        catalog_path = self.app_config.paths.track_catalog or self.config.get_track_catalog_path()
+        catalog = load_track_catalog(catalog_path)
         track_dicts = self._tracks_to_dicts(catalog)
         self.state.set_tracks(track_dicts)
 
         metadata = load_metadata(
-            self.config.get_metadata_path(),
-            self.config.get_artwork_root(),
+            self.app_config.paths.metadata or self.config.get_metadata_path(),
+            self.app_config.paths.artwork_root or self.config.get_artwork_root(),
         )
         self.state.set_metadata(metadata)
 

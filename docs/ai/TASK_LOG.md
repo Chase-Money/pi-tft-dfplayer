@@ -22,3 +22,7 @@
 2025-12-01 | codebase-review | Comprehensive codebase review and grading across 6 categories (correctness, readability, design, maintainability, testing, Python style) | n/a | Review documented in graded_12-1.md; identified Application god-object and config consolidation as top refactoring priorities.
 
 2025-12-01 | docs-consolidation | Consolidated 40+ documentation files into 5 comprehensive documents | n/a | Reduced clutter while maintaining quality; updated CODING_STANDARDS.md with documentation workflow guidelines.
+
+2025-12-02 | feature/framework-migration | Config consolidation: added typed ApplicationConfig/RuntimeState, bridged legacy Config, updated app to typed paths/volume, refreshed docs, removed deprecated dfplayer_backend | ./venv/bin/pytest -q tests/core/test_application_config_structured.py | Runtime uses src/main.py + app.py; legacy backend removed; docs aligned to unified entrypoint.
+
+2025-12-03 | docs-workflow | Added workflow requirements to AGENTS.md and CLAUDE.md: check TASK_LOG.md before actions, log activities after changes | n/a | Ensures continuity between developers working on the codebase.
