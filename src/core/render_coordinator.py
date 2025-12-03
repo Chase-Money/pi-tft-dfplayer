@@ -44,4 +44,5 @@ class RenderCoordinator:
 
         self.renderer.render()
         self.renderer.present(dirty_rects=dirty_rects)
+        self.renderer.present(dirty_rects=dirty_rects)
         return True
