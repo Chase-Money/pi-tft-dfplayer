@@ -107,7 +107,7 @@ class TestTouchInputScaleXY:
 
     def test_scale_xy_with_flip_x(self, touch_input):
         """Test coordinate scaling with X-axis flip."""
-        touch_input.orientation = {'SWAP_XY': False, 'FLIP_X': True, 'FLIP_Y': False}
+        touch_input.orientation = {'swap_xy': False, 'flip_x': True, 'flip_y': False}
 
         # Left edge (x=0) should map to right edge after flip
         sx, sy = touch_input.scale_xy(0, 2048)
@@ -116,15 +116,15 @@ class TestTouchInputScaleXY:
 
     def test_scale_xy_with_swap_xy(self, touch_input):
         """Test coordinate scaling with XY swap (90° rotation)."""
-        touch_input.orientation = {'SWAP_XY': True, 'FLIP_X': False, 'FLIP_Y': False}
+        touch_input.orientation = {'swap_xy': True, 'flip_x': False, 'flip_y': False}
 
         # When swapped, x and y axes are exchanged along with screen dimensions.
         sx1, sy1 = touch_input.scale_xy(1000, 3000)
         expected_sx1 = int(3000 * (touch_input.screen_height - 1) / (touch_input.max_y - touch_input.min_y))
         expected_sy1 = int(1000 * (touch_input.screen_width - 1) / (touch_input.max_x - touch_input.min_x))
 
-        assert abs(sx1 - expected_sx1) < 5, "SWAP_XY should map X to screen height"
-        assert abs(sy1 - expected_sy1) < 5, "SWAP_XY should map Y to screen width"
+        assert abs(sx1 - expected_sx1) < 5, "swap_xy should map X to screen height"
+        assert abs(sy1 - expected_sy1) < 5, "swap_xy should map Y to screen width"
 
 
 class TestTouchInputDeviceDetection:

@@ -2,6 +2,18 @@
 Touch controller wrapper for V2 framework integration.
 
 Provides event-based touch handling compatible with the UI framework.
+
+THREADING SAFETY:
+    This class is NOT thread-safe. All methods (especially get_events()) modify
+    instance variables without locking. This is intentional for performance and
+    simplicity - TouchController MUST be used from a single thread only.
+
+    Current usage: Main UI loop thread reads touch events at ~30fps
+    Risk: LOW - single-threaded usage pattern
+
+    If multi-threaded access is needed in the future, add a threading.Lock
+    around all methods that access _last_x, _last_y, _press_start_x, _press_start_y,
+    _press_start_time, and _touch_down_time.
 """
 
 import logging
@@ -60,19 +72,21 @@ class TouchController:
         self.press_time = 0.0
         self.last_x = 0
         self.last_y = 0
+        self.last_tap_time = 0.0  # For debouncing
 
         # Load gesture thresholds from config or use defaults
         if config:
             thresholds = config.get_touch_thresholds()
-            self.tap_threshold_ms = thresholds.get("tap_threshold_ms", 400)
-            self.drag_threshold_px = thresholds.get("drag_threshold_px", 12)
+            self.tap_threshold_ms = thresholds.get("tap_threshold_ms", 300)
+            self.drag_threshold_px = thresholds.get("drag_threshold_px", 10)
             self.swipe_threshold_px = thresholds.get("swipe_threshold_px", 48)
+            self.tap_debounce_ms = thresholds.get("tap_debounce_ms", 100)
         else:
             # Defaults tuned for responsiveness on resistive panels
-            # Very high thresholds needed due to significant panel jitter
-            self.tap_threshold_ms = 500  # Increased from 400ms
-            self.drag_threshold_px = 50  # Increased from 25px - resistive panels have major jitter
-            self.swipe_threshold_px = 80  # Increased from 60px for clear swipe intent
+            self.tap_threshold_ms = 300
+            self.drag_threshold_px = 10
+            self.swipe_threshold_px = 48
+            self.tap_debounce_ms = 100  # Prevent accidental double-taps
 
     def get_events(self, timeout: float = 0.0) -> List[TouchEvent]:
         """
@@ -155,6 +169,14 @@ class TouchController:
 
     def _handle_press(self) -> Optional[TouchEvent]:
         """Handle touch press event."""
+        # Filter out noise touches near hardware minimum bounds - common spurious events on resistive panels
+        # Use threshold instead of exact check to allow legitimate top-left touches
+        NOISE_THRESHOLD = 50  # Units in raw hardware coordinates
+        if (self.last_x <= self.touch.min_x + NOISE_THRESHOLD and
+            self.last_y <= self.touch.min_y + NOISE_THRESHOLD):
+            logger.debug(f"[TOUCHCTRL] Ignoring noise touch near hardware bounds: raw=({self.last_x}, {self.last_y}), min_bounds=({self.touch.min_x}, {self.touch.min_y})")
+            return None
+
         # Scale coordinates
         sx, sy = self.touch.scale_xy(self.last_x, self.last_y)
 
@@ -191,9 +213,20 @@ class TouchController:
 
         self.is_pressed = False
 
+        # Debounce: ignore ultra-short taps (<20ms) which are noise on resistive panels
+        if duration_ms < 20:
+            return None
+
         # Determine gesture type
         if duration_ms < self.tap_threshold_ms and distance < self.drag_threshold_px:
+            # Tap debouncing: prevent rapid double-taps within debounce window
+            time_since_last_tap = (release_time - self.last_tap_time) * 1000
+            if time_since_last_tap < self.tap_debounce_ms:
+                logger.debug(f"[TOUCHCTRL] Tap debounced: {time_since_last_tap:.1f}ms since last tap")
+                return None
+
             # Tap gesture
+            self.last_tap_time = release_time
             return TouchEvent(
                 type="tap",
                 x=self.press_x,
@@ -272,9 +305,9 @@ class TouchController:
         """
         if self.touch:
             self.touch.orientation = {
-                "SWAP_XY": swap_xy,
-                "FLIP_X": flip_x,
-                "FLIP_Y": flip_y
+                "swap_xy": swap_xy,
+                "flip_x": flip_x,
+                "flip_y": flip_y
             }
             logger.info(f"Touch orientation set: swap={swap_xy}, flip_x={flip_x}, flip_y={flip_y}")
 

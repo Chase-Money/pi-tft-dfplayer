@@ -155,12 +155,11 @@ class FramebufferRendererV2:
         # Let the screen manager render the current screen
         self.screen_manager.render(context)
 
-    def present(self) -> None:
+    def present(self, dirty_rects=None) -> None:
         """
         Present the backbuffer to the hardware framebuffer.
 
-        This performs the actual framebuffer write and should be called
-        after render() to display the frame.
+        If dirty_rects is provided, only those regions are pushed.
         """
         try:
             # Validate framebuffer reference
@@ -174,10 +173,14 @@ class FramebufferRendererV2:
                 raise RuntimeError("Backbuffer not initialized")
 
             # Log detailed state before push (only in debug mode)
-            logger.debug(f"Presenting: fb={self.fb}, bb_size={self.backbuffer.size}, fb_size=({self.fb.width},{self.fb.height})")
+            logger.debug(f"Presenting: fb={self.fb}, bb_size={self.backbuffer.size}, fb_size=({self.fb.width},{self.fb.height}), dirty={dirty_rects}")
 
-            # Push to framebuffer
-            self.fb.push(self.backbuffer)
+            # Push to framebuffer (full or partial)
+            if dirty_rects:
+                for rect in dirty_rects:
+                    self.fb.push_partial(self.backbuffer, rect)
+            else:
+                self.fb.push(self.backbuffer)
 
             logger.debug("Present completed successfully")
 
@@ -201,16 +204,16 @@ class FramebufferRendererV2:
         self.screen_manager = manager
         logger.info("Screen manager attached to renderer")
 
-    def render_and_present(self) -> None:
+    def render_and_present(self, dirty_rects=None) -> None:
         """
         Convenience method to render and present in one call.
 
         Equivalent to:
             renderer.render()
-            renderer.present()
+            renderer.present(dirty_rects)
         """
         self.render()
-        self.present()
+        self.present(dirty_rects)
 
     def scale_rect(self, x_pct: float, y_pct: float, w_pct: float, h_pct: float) -> tuple:
         """

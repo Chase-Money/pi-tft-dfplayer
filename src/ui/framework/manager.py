@@ -42,6 +42,7 @@ class ScreenManagerV2:
         self._registry: Dict[str, Type[ScreenView]] = {}
         self._stack: List[ScreenView] = []
         self.services = services or {}
+        self._needs_full_refresh = False  # Force full screen update after navigation
 
     # Registration ---------------------------------------------------
     def register(self, name: str, screen_cls: Type[ScreenView]) -> None:
@@ -52,6 +53,8 @@ class ScreenManagerV2:
         screen = self._instantiate(name)
         self._stack.append(screen)
         screen.on_enter(**kwargs)
+        self._needs_full_refresh = True  # Force full screen clear
+        logger.info(f"[MANAGER] Pushed screen '{name}', flagged for full refresh")
         return screen
 
     def pop(self) -> Optional[ScreenView]:
@@ -59,6 +62,8 @@ class ScreenManagerV2:
             return None
         screen = self._stack.pop()
         screen.on_exit()
+        self._needs_full_refresh = True  # Force full screen clear
+        logger.info(f"[MANAGER] Popped screen '{screen.name}', flagged for full refresh")
         return screen
 
     def replace(self, name: str, **kwargs) -> ScreenView:
@@ -72,6 +77,14 @@ class ScreenManagerV2:
 
     def stack(self) -> List[str]:  # for debugging/testing
         return [screen.name for screen in self._stack]
+
+    def needs_full_refresh(self) -> bool:
+        """Check if a full screen refresh is needed (after screen navigation)."""
+        return self._needs_full_refresh
+
+    def clear_refresh_flag(self) -> None:
+        """Clear the full refresh flag after it's been handled."""
+        self._needs_full_refresh = False
 
     # Dispatch -------------------------------------------------------
     def handle_event(self, event: UIEvent) -> bool:
@@ -88,7 +101,9 @@ class ScreenManagerV2:
     def render(self, context: dict) -> None:
         screen = self.current
         if screen:
-            screen.render(context)
+            # Let the screen render; if it returns dirty rects, propagate them
+            dirty = screen.render(context)
+            context["dirty_rects"] = dirty
 
     # Internal -------------------------------------------------------
     def _instantiate(self, name: str) -> ScreenView:

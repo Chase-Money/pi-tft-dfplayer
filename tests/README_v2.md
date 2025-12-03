@@ -16,7 +16,7 @@ This document describes the v2 test suite that validates the new modular code pa
 tests/
 ├── core/
 │   ├── test_profile_select_v2.py        # v2 profile selection
-│   └── test_profile_select_v3.py        # v3 with auto-detect
+│   └── test_hardware_profile.py         # v3 with auto-detect
 ├── hardware/
 │   ├── test_display_st7735.py           # emulator-based tests
 │   └── test_button_input.py             # fake GPIO tests
@@ -39,7 +39,7 @@ pip install pytest
 Run the v2 tests:
 ```bash
 pytest -q tests/ui/test_draw_utils_v2.py \
-        tests/core/test_profile_select_v3.py tests/core/test_profile_select_v2.py \
+        tests/core/test_hardware_profile.py tests/core/test_profile_select_v2.py \
         tests/hardware/test_display_st7735.py tests/hardware/test_button_input.py \
         tests/main/test_main_touch_v2.py
 ```

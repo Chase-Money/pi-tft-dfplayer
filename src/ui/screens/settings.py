@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from PIL import Image, ImageDraw
 
+from core.orients import ORIENTS
 from ..framework.manager import ScreenView
 from ..framework.widgets import ButtonWidget
 from ..framework.events import UIEvent
 from ..views import draw_status_banner
+from ..theme_palette import get_palette
+from ..framework.debug import debug_tap_logging_enabled
 
 
 class SettingsScreen(ScreenView):
@@ -22,7 +25,12 @@ class SettingsScreen(ScreenView):
         self._last_resolution = None
 
     def on_enter(self, **kwargs):
-        self._orientation_idx = 0  # Stub: orientation not yet implemented in v2
+        # Load current orientation index from config
+        app = self._app()
+        if app and hasattr(app, "config"):
+            self._orientation_idx = app.config.get_touch_orientation_index()
+        else:
+            self._orientation_idx = 0
         self._last_resolution = None
 
     def render(self, context: dict) -> None:
@@ -47,9 +55,10 @@ class SettingsScreen(ScreenView):
             orient_y = max(32, int(80 * scale))
             cal_y = orient_y + button_h + max(12, int(20 * scale))
 
-            self.back_button = ButtonWidget((margin, small_margin, back_w, max(16, int(40 * scale))), "Back", self.manager.pop)
-            self.orientation_button = ButtonWidget((margin, orient_y, button_w, button_h), self._orientation_label, self._cycle_orientation)
-            self.cal_button = ButtonWidget((margin, cal_y, button_w, button_h), "Calibrate Touch", self._open_calibration)
+            dbg = debug_tap_logging_enabled()
+            self.back_button = ButtonWidget((margin, small_margin, back_w, max(16, int(40 * scale))), "Back", self.manager.pop, debug_log=dbg)
+            self.orientation_button = ButtonWidget((margin, orient_y, button_w, button_h), self._orientation_label, self._cycle_orientation, debug_log=dbg)
+            self.cal_button = ButtonWidget((margin, cal_y, button_w, button_h), "Calibrate Touch", self._open_calibration, debug_log=dbg)
             self._last_resolution = current_res
 
         # Draw status banner
@@ -79,6 +88,17 @@ class SettingsScreen(ScreenView):
         if self.cal_button:
             self.cal_button.draw(draw, fonts.get("small"))
 
+        # Calculate dimensions for dirty rects (in case resolution didn't change)
+        small_margin = max(2, int(4 * scale))
+        back_w = max(30, int(80 * scale))
+        button_w = int(w * 0.75)
+
+        self.last_dirty = [
+            (margin, small_margin, back_w, max(16, int(40 * scale))),
+            (margin, orient_y, button_w, button_h),
+            (margin, cal_y, button_w, button_h),
+        ]
+
     def handle_event(self, event: UIEvent) -> bool:
         if self.back_button and self.back_button.handle_event(event):
             return True
@@ -92,9 +112,30 @@ class SettingsScreen(ScreenView):
         return f"Orientation {self._orientation_idx + 1}/8"
 
     def _cycle_orientation(self) -> None:
-        # Stub: Touch orientation not yet implemented in v2 app
-        self._orientation_idx = (self._orientation_idx + 1) % 8
-        # TODO: Implement touch orientation in app_v2.py
+        app = self._app()
+        if not app or not hasattr(app, "touch_controller"):
+            return
+        self._orientation_idx = (self._orientation_idx + 1) % len(ORIENTS)
+        orient = ORIENTS[self._orientation_idx]
+        try:
+            if app.touch_controller:
+                app.touch_controller.set_orientation(
+                    swap_xy=orient["SWAP_XY"],
+                    flip_x=orient["FLIP_X"],
+                    flip_y=orient["FLIP_Y"],
+                )
+            # Persist
+            if hasattr(app, "config"):
+                app.config.set_touch_orientation(
+                    swap_xy=orient["SWAP_XY"],
+                    flip_x=orient["FLIP_X"],
+                    flip_y=orient["FLIP_Y"]
+                )
+                app.config.set_touch_orientation_index(self._orientation_idx)
+                app.config.save()
+            app.set_status(f"Orientation {self._orientation_idx + 1}/8", "info", 2)
+        except Exception:
+            app.set_status("Failed to apply orientation", "error", 3)
 
     def _open_calibration(self) -> None:
         self.manager.push("calibration")

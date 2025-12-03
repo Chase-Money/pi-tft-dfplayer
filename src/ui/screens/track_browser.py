@@ -9,6 +9,7 @@ from ..framework.widgets import ListWidget, ButtonWidget
 from ..framework.events import UIEvent
 from ..views import draw_status_banner
 from ..theme_palette import get_palette
+from ..framework.debug import debug_tap_logging_enabled
 
 
 class TrackBrowserScreen(ScreenView):
@@ -56,10 +57,9 @@ class TrackBrowserScreen(ScreenView):
         # Only recreate widgets if resolution changed
         current_res = (w, h)
         if current_res != self._last_resolution:
-            self.back_button = ButtonWidget((margin, small_margin, back_w, button_h), "Back", self.manager.pop)
+            dbg = debug_tap_logging_enabled()
+            self.back_button = ButtonWidget((margin, small_margin, back_w, button_h), "Back", self.manager.pop, debug_log=dbg)
             self._last_resolution = current_res
-
-        self.back_button = ButtonWidget((margin, small_margin, back_w, button_h), "Back", self.manager.pop)
 
         # Draw status banner
         app = self.services.get("app") if self.services else None
@@ -90,6 +90,7 @@ class TrackBrowserScreen(ScreenView):
 
         # Draw list
         self.list_widget.draw(draw, self.list_rect, fonts["small"])
+        self.last_dirty = [self.list_rect]
 
     def handle_event(self, event: UIEvent) -> bool:
         if event.type == "drag":

@@ -102,6 +102,18 @@ class PlaybackBackend(ABC):
         """
         pass
 
+    @abstractmethod
+    def poll_event(self, timeout: Optional[float] = None) -> Optional[Dict[str, Any]]:
+        """Fetch a pending asynchronous event from the backend, if any.
+
+        Args:
+            timeout: Optional timeout in seconds when waiting for events.
+
+        Returns:
+            Event dictionary or None when no events are available.
+        """
+        pass
+
     def activate(self):
         """Activate this backend (called when switching to this backend)."""
         self.is_active = True

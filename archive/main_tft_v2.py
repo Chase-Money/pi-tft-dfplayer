@@ -582,13 +582,13 @@ class DFPlayerTFTApp:
         cal = self.config.get_touch_calibration()
         if cal:
             self.touch.set_calibration(*cal)
-        idx = self.config.get_touch_orientation()
+        idx = self.config.get_touch_orientation_index()
         self.orientation_index = idx % len(ORIENTS)
         orient = ORIENTS[self.orientation_index]
         self.touch.set_orientation(
-            swap_xy=orient["SWAP_XY"],
-            flip_x=orient["FLIP_X"],
-            flip_y=orient["FLIP_Y"],
+            swap_xy=orient.get("SWAP_XY") or orient.get("swap_xy", False),
+            flip_x=orient.get("FLIP_X") or orient.get("flip_x", False),
+            flip_y=orient.get("FLIP_Y") or orient.get("flip_y", False),
         )
 
     def set_touch_orientation(self, index: int) -> None:

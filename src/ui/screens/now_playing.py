@@ -16,6 +16,7 @@ from ..views import (
     draw_status_banner,
 )
 from ..theme_palette import get_palette
+from ..framework.debug import debug_tap_logging_enabled
 
 
 class NowPlayingScreen(ScreenView):
@@ -60,9 +61,10 @@ class NowPlayingScreen(ScreenView):
         slider_y = title_y + max(12, int(20 * scale))
         button_y = slider_y + slider_h + max(8, int(12 * scale))
 
+        dbg = debug_tap_logging_enabled()
         # Create widgets dynamically based on resolution
-        self.back_button = ButtonWidget((margin, small_margin, back_w, button_h), "Back", self.manager.pop)
-        self.play_button = ButtonWidget((margin, button_y, play_w, button_h), self._play_label, self._toggle_play)
+        self.back_button = ButtonWidget((margin, small_margin, back_w, button_h), "Back", self.manager.pop, debug_log=dbg)
+        self.play_button = ButtonWidget((margin, button_y, play_w, button_h), self._play_label, self._toggle_play, debug_log=dbg)
         self.slider = SliderWidget((margin, slider_y, int(w * 0.7), slider_h))
 
         # Draw status banner
@@ -109,6 +111,12 @@ class NowPlayingScreen(ScreenView):
         # Draw controls
         self.play_button.draw(draw, fonts["small"])
         self.slider.draw(draw, fonts["small"])
+        # Track a coarse dirty region (controls + artwork area)
+        self.last_dirty = [
+            (margin, artwork_y, artwork_size, artwork_size),
+            (margin, button_y, play_w, button_h),
+            (margin, slider_y, int(w * 0.7), slider_h + button_h + max(8, int(12 * scale))),
+        ]
 
     def handle_event(self, event: UIEvent) -> bool:
         if self.back_button.handle_event(event):
@@ -137,7 +145,7 @@ class NowPlayingScreen(ScreenView):
             self.state.pause_playback()
         else:
             # If a track is selected but paused, resume it.
-            if self.state.get_now_playing_track() is not None:
+            if self.state.get_playing_track() is not None:
                 self.backend.resume()
                 self.state.start_playback()
             # Otherwise, play the newly selected track.

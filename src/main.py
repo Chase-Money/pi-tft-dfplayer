@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Unified entrypoint for the v2 touchscreen application.
+Unified entrypoint for the touchscreen application.
 
-Uses ConfigV2 + TouchController + ScreenManagerV2 stack via app_v2.Application.
+Uses ConfigV2 + TouchController + ScreenManagerV2 stack via app.Application.
 """
 
 import logging
 
-from app_v2 import Application
+from app import Application
 
 
 def main():

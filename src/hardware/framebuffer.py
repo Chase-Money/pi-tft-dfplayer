@@ -2,10 +2,13 @@
 Framebuffer handling for the DFPlayer GUI.
 """
 
+import logging
 import os
 import mmap
 import numpy as np
 from PIL import Image
+
+logger = logging.getLogger(__name__)
 
 class Framebuffer:
     def __init__(self, device="/dev/fb1"):
@@ -30,19 +33,32 @@ class Framebuffer:
     def _rgb888_to_rgb565le(self, img):
         """Convert RGB888 to RGB565 little-endian using NumPy (optimized with buffer reuse)."""
         # Get image as numpy array (shape: height, width, 3)
-        arr = np.frombuffer(img.tobytes(), dtype=np.uint8).reshape((self.height, self.width, 3))
-        
-        # Convert to RGB565 directly into pre-allocated buffer
-        np.bitwise_or(
+        # Use img.size instead of self dimensions to support partial updates
+        arr = np.frombuffer(img.tobytes(), dtype=np.uint8).reshape((img.height, img.width, 3))
+
+        # For partial updates, create a temporary buffer (can't use pre-allocated)
+        # For full screen, reuse the pre-allocated buffer for performance
+        if img.size == (self.width, self.height):
+            # Full screen update: reuse buffer
             np.bitwise_or(
-                np.left_shift(np.right_shift(arr[:, :, 0], 3).astype(np.uint16), 11),
-                np.left_shift(np.right_shift(arr[:, :, 1], 2).astype(np.uint16), 5)
-            ),
-            np.right_shift(arr[:, :, 2], 3).astype(np.uint16),
-            out=self._rgb565_buffer
-        )
-        
-        return self._rgb565_buffer
+                np.bitwise_or(
+                    np.left_shift(np.right_shift(arr[:, :, 0], 3).astype(np.uint16), 11),
+                    np.left_shift(np.right_shift(arr[:, :, 1], 2).astype(np.uint16), 5)
+                ),
+                np.right_shift(arr[:, :, 2], 3).astype(np.uint16),
+                out=self._rgb565_buffer
+            )
+            return self._rgb565_buffer
+        else:
+            # Partial update: create new buffer
+            rgb565 = np.bitwise_or(
+                np.bitwise_or(
+                    np.left_shift(np.right_shift(arr[:, :, 0], 3).astype(np.uint16), 11),
+                    np.left_shift(np.right_shift(arr[:, :, 1], 2).astype(np.uint16), 5)
+                ),
+                np.right_shift(arr[:, :, 2], 3).astype(np.uint16)
+            )
+            return rgb565
 
     def push(self, img):
         """Push an image to the framebuffer."""
@@ -52,7 +68,63 @@ class Framebuffer:
         # Use memoryview for zero-copy write with pre-allocated buffer (310x faster!)
         self.mm.write(memoryview(self._rgb888_to_rgb565le(img.convert("RGB"))))
 
+    def push_partial(self, img, rect):
+        """
+        Push only a rectangular region to the framebuffer.
+
+        Args:
+            img: PIL Image matching framebuffer size or larger.
+            rect: (x, y, w, h) rectangle in framebuffer coords.
+        """
+        if img.size != (self.width, self.height):
+            img = img.resize((self.width, self.height))
+        x, y, w, h = rect
+        x2, y2 = x + w, y + h
+        # Clip to framebuffer bounds
+        x, y = max(0, x), max(0, y)
+        x2, y2 = min(self.width, x2), min(self.height, y2)
+        if x2 <= x or y2 <= y:
+            return
+        region = img.crop((x, y, x2, y2)).convert("RGB")
+        buf = self._rgb888_to_rgb565le(region)
+        # Write row by row into mm at correct offset
+        row_bytes = (x2 - x) * 2
+        for row_idx, row in enumerate(range(y, y2)):
+            offset = int(row) * int(self.width) * 2 + int(x) * 2
+            self.mm.seek(offset)
+            self.mm.write(memoryview(buf[row_idx, :].tobytes()))
+
     def close(self):
-        """Close the framebuffer resources."""
-        self.mm.close()
-        self.fb_file.close()
+        """Close the framebuffer resources.
+
+        Logs errors during cleanup but does not raise to allow shutdown to proceed.
+        """
+        errors = []
+
+        # Close mmap
+        try:
+            if hasattr(self, "mm") and self.mm and not self.mm.closed:
+                self.mm.close()
+        except Exception as e:
+            errors.append(f"mmap close: {e}")
+            logger.error(f"Error closing framebuffer mmap: {e}")
+
+        # Close file
+        try:
+            if hasattr(self, "fb_file") and self.fb_file and not self.fb_file.closed:
+                self.fb_file.close()
+        except Exception as e:
+            errors.append(f"file close: {e}")
+            logger.error(f"Error closing framebuffer file: {e}")
+
+        if errors:
+            logger.warning(f"Framebuffer cleanup encountered {len(errors)} error(s)")
+
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - ensures cleanup."""
+        self.close()
+        return False  # Don't suppress exceptions

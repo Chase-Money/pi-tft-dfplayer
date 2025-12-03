@@ -1,330 +1,179 @@
 """
-Unit tests for DFPlayer backend with mocked serial port.
-
-Tests command packet construction, checksum validation, boundary conditions,
-and error handling.
+Updated tests for DFPlayer backend to validate delegation to hardware DFPlayer
+and async event handling without exercising low-level serial packet logic.
 """
 
+import queue
 import pytest
-from unittest.mock import Mock, MagicMock, patch, call
-from io import BytesIO
+
+from src.backends.dfplayer import DFPlayerBackend
+
+
+class FakeDFPlayer:
+    def __init__(self, connected: bool = True):
+        self.is_connected = connected
+        self.play_calls = 0
+        self.pause_calls = 0
+        self.stop_calls = 0
+        self.next_calls = 0
+        self.prev_calls = 0
+        self.play_track_calls = []
+        self.last_volume = None
+        self.closed = False
+        self.responses = queue.Queue()
+
+    def set_volume(self, volume: int):
+        self.last_volume = volume
+
+    def play(self):
+        self.play_calls += 1
+
+    def pause(self):
+        self.pause_calls += 1
+
+    def stop(self):
+        self.stop_calls += 1
+
+    def next_track(self):
+        self.next_calls += 1
+
+    def prev_track(self):
+        self.prev_calls += 1
+
+    def play_track(self, number: int):
+        self.play_track_calls.append(number)
+
+    def read_response(self, timeout: float = 0.1):
+        try:
+            return self.responses.get_nowait()
+        except queue.Empty:
+            return None
+
+    def close(self):
+        self.closed = True
+
+
+def _build_packet(cmd: int, p1: int = 0, p2: int = 0) -> bytes:
+    pkt = bytearray([0x7E, 0xFF, 0x06, cmd, 0x00, p1, p2, 0x00, 0x00, 0xEF])
+    total = sum(pkt[1:7]) & 0xFFFF
+    cs = (0xFFFF - total + 1) & 0xFFFF
+    pkt[7], pkt[8] = (cs >> 8) & 0xFF, cs & 0xFF
+    return bytes(pkt)
 
 
 @pytest.fixture
-def mock_serial():
-    """Mock serial.Serial class."""
-    with patch('serial.Serial') as mock_ser_class:
-        mock_instance = MagicMock()
-        mock_instance.is_open = True
-        mock_instance.timeout = 0.1
-        mock_instance.write = MagicMock()
-        mock_instance.read = MagicMock(return_value=b'')
-        mock_ser_class.return_value = mock_instance
-        yield mock_instance
+def fake_dfplayer():
+    return FakeDFPlayer()
 
 
 @pytest.fixture
-def dfplayer_backend(mock_serial):
-    """Create DFPlayerBackend instance with mocked serial."""
-    from src.backends.dfplayer_v2 import DFPlayerBackend
-    backend = DFPlayerBackend(port='/dev/null', baudrate=9600)
+def backend(fake_dfplayer, monkeypatch):
+    backend = DFPlayerBackend(port="/dev/null", dfplayer_factory=lambda p, b: fake_dfplayer)
+    # Avoid spawning listener threads in unit tests
+    monkeypatch.setattr(backend, "_start_listener", lambda: None)
     backend.initialize()
-    return backend
-
-
-class TestInitialization:
-    """Test backend initialization."""
-
-    def test_init_success(self, mock_serial):
-        """Test successful initialization."""
-        from src.backends.dfplayer_v2 import DFPlayerBackend
-        backend = DFPlayerBackend(port='/dev/serial0')
-        result = backend.initialize()
-        assert result is True
-        assert backend.ser is not None
-
-    def test_init_serial_exception(self):
-        """Test initialization with serial exception."""
-        with patch('serial.Serial', side_effect=Exception("Port not found")):
-            from src.backends.dfplayer_v2 import DFPlayerBackend
-            backend = DFPlayerBackend(port='/dev/nonexistent')
-            result = backend.initialize()
-            assert result is False
-            assert backend.ser is None
-
-    def test_init_custom_baudrate(self, mock_serial):
-        """Test initialization with custom baudrate."""
-        from src.backends.dfplayer_v2 import DFPlayerBackend
-        backend = DFPlayerBackend(port='/dev/serial0', baudrate=115200)
-        assert backend.baudrate == 115200
-
-
-class TestChecksumCalculation:
-    """Test DFPlayer checksum calculation."""
-
-    def test_checksum_correct(self, dfplayer_backend):
-        """Test checksum calculation is correct."""
-        # Known good packet: [0xFF, 0x06, 0x0F, 0x00, 0x01, 0x01]
-        # Expected checksum: 0xFFEE (high byte: 0xFF, low byte: 0xEE)
-        payload = bytearray([0xFF, 0x06, 0x0F, 0x00, 0x01, 0x01])
-        checksum = dfplayer_backend._checksum(payload)
-
-        # Verify checksum calculation
-        total = sum(payload) & 0xFFFF
-        expected = (0xFFFF - total + 1) & 0xFFFF
-        assert checksum == expected
-
-    def test_checksum_various_payloads(self, dfplayer_backend):
-        """Test checksum with various payload values."""
-        test_cases = [
-            bytearray([0xFF, 0x06, 0x03, 0x00, 0x00, 0x0F]),
-            bytearray([0xFF, 0x06, 0x06, 0x00, 0x00, 0x1E]),
-            bytearray([0xFF, 0x06, 0x01, 0x00, 0x00, 0x00]),
-        ]
-
-        for payload in test_cases:
-            checksum = dfplayer_backend._checksum(payload)
-            # Verify it's a valid 16-bit value
-            assert 0 <= checksum <= 0xFFFF
-            # Verify the checksum property: sum + checksum = 0 (mod 65536)
-            assert (sum(payload) + checksum) & 0xFFFF == 0
-
-
-class TestCommandConstruction:
-    """Test DFPlayer command packet construction."""
-
-    def test_play_track_command(self, dfplayer_backend, mock_serial):
-        """Test play track command packet."""
-        dfplayer_backend.play_track(1)
-
-        # Verify write was called
-        assert mock_serial.write.called
-
-        # Get the written packet
-        packet = mock_serial.write.call_args[0][0]
-
-        # Verify packet structure
-        assert packet[0] == 0x7E  # Start byte
-        assert packet[1] == 0xFF  # Version
-        assert packet[2] == 0x06  # Length
-        assert packet[3] == 0x03  # Play track command (0x03, not 0x0F)
-        assert packet[9] == 0xEF  # End byte
-
-        # Verify checksum
-        expected_cs = dfplayer_backend._checksum(packet[1:7])
-        actual_cs = (packet[7] << 8) | packet[8]
-        assert actual_cs == expected_cs
-
-    def test_set_volume_command(self, dfplayer_backend, mock_serial):
-        """Test set volume command packet."""
-        dfplayer_backend.set_volume(20)
-
-        packet = mock_serial.write.call_args[0][0]
-
-        assert packet[0] == 0x7E
-        assert packet[3] == 0x06  # Volume command
-        assert packet[6] == 20  # Volume level
-
-    def test_stop_command(self, dfplayer_backend, mock_serial):
-        """Test stop command packet."""
-        dfplayer_backend.stop()
-
-        packet = mock_serial.write.call_args[0][0]
-
-        assert packet[0] == 0x7E
-        assert packet[3] == 0x16  # Stop command
-
-    def test_reset_command(self, dfplayer_backend, mock_serial):
-        """Test reset command packet."""
-        dfplayer_backend.reset()
-
-        # reset() sends two commands: 0x0C (reset) and 0x09 (select TF card)
-        # Check that write was called at least twice
-        assert mock_serial.write.call_count >= 2
-
-        # Get the first command (reset command)
-        first_packet = mock_serial.write.call_args_list[0][0][0]
-
-        assert first_packet[0] == 0x7E
-        assert first_packet[3] == 0x0C  # Reset command
-
-
-class TestBoundaryConditions:
-    """Test boundary conditions for volume and track numbers."""
-
-    def test_volume_minimum(self, dfplayer_backend, mock_serial):
-        """Test volume at minimum (0)."""
-        dfplayer_backend.set_volume(0)
-
-        packet = mock_serial.write.call_args[0][0]
-        assert packet[6] == 0
-
-    def test_volume_maximum(self, dfplayer_backend, mock_serial):
-        """Test volume at maximum (30)."""
-        dfplayer_backend.set_volume(30)
-
-        packet = mock_serial.write.call_args[0][0]
-        assert packet[6] == 30
-
-    def test_volume_clamping_high(self, dfplayer_backend, mock_serial):
-        """Test volume clamping at high end."""
-        # DFPlayer max is 30, should clamp
-        dfplayer_backend.set_volume(50)
-
-        packet = mock_serial.write.call_args[0][0]
-        assert packet[6] <= 30  # Should be clamped
-
-    def test_volume_clamping_low(self, dfplayer_backend, mock_serial):
-        """Test volume clamping at low end."""
-        # Should clamp negative values to 0
-        dfplayer_backend.set_volume(-10)
-
-        packet = mock_serial.write.call_args[0][0]
-        assert packet[6] >= 0  # Should be clamped
-
-    def test_track_number_edge_cases(self, dfplayer_backend, mock_serial):
-        """Test track number at boundaries."""
-        # Track 1
-        dfplayer_backend.play_track(1)
-        packet = mock_serial.write.call_args[0][0]
-        assert packet[5] == 0x00  # High byte
-        assert packet[6] == 0x01  # Low byte
-
-        # Track 255 (max in single byte)
-        dfplayer_backend.play_track(255)
-        packet = mock_serial.write.call_args[0][0]
-        assert packet[5] == 0x00
-        assert packet[6] == 0xFF
-
-        # Track 256 (requires high byte)
-        dfplayer_backend.play_track(256)
-        packet = mock_serial.write.call_args[0][0]
-        assert packet[5] == 0x01  # High byte
-        assert packet[6] == 0x00  # Low byte
-
-
-class TestResponseHandling:
-    """Test DFPlayer response reading and validation."""
-
-    def test_read_valid_response(self, dfplayer_backend, mock_serial):
-        """Test reading a valid response."""
-        # Create valid response packet
-        valid_response = bytearray([0x7E, 0xFF, 0x06, 0x3D, 0x00, 0x00, 0x01])
-        checksum = dfplayer_backend._checksum(valid_response[1:7])
-        valid_response.extend([(checksum >> 8) & 0xFF, checksum & 0xFF, 0xEF])
-
-        mock_serial.read.return_value = bytes(valid_response)
-
-        response = dfplayer_backend.read_response()
-        assert response is not None
-        assert len(response) == 10
-        assert response[0] == 0x7E
-        assert response[9] == 0xEF
-
-    def test_read_invalid_checksum(self, dfplayer_backend, mock_serial):
-        """Test reading response with invalid checksum."""
-        # Create response with incorrect checksum
-        invalid_response = bytearray([0x7E, 0xFF, 0x06, 0x3D, 0x00, 0x00, 0x01, 0x00, 0x00, 0xEF])
-
-        mock_serial.read.return_value = bytes(invalid_response)
-
-        response = dfplayer_backend.read_response()
-        assert response is None  # Should reject invalid checksum
-
-    def test_read_timeout(self, dfplayer_backend, mock_serial):
-        """Test read timeout handling."""
-        # Simulate timeout (empty read)
-        mock_serial.read.return_value = b''
-
-        response = dfplayer_backend.read_response(timeout=0.1)
-        assert response is None
-
-    def test_read_partial_response(self, dfplayer_backend, mock_serial):
-        """Test handling of partial response."""
-        # Only 5 bytes instead of 10
-        mock_serial.read.return_value = b'\x7E\xFF\x06\x3D\x00'
-
-        response = dfplayer_backend.read_response()
-        assert response is None  # Should reject partial response
-
-
-class TestErrorHandling:
-    """Test error handling for various failure scenarios."""
-
-    def test_send_command_without_initialization(self):
-        """Test sending command without initialized serial port."""
-        from src.backends.dfplayer_v2 import DFPlayerBackend
-        backend = DFPlayerBackend()
-        # Should not crash, just log warning
-        backend.play_track(1)
-        assert backend.ser is None
-
-    def test_send_command_serial_exception(self, dfplayer_backend, mock_serial):
-        """Test handling serial write exception."""
-        mock_serial.write.side_effect = Exception("Write error")
-
-        # Should not crash, just log error
-        dfplayer_backend.play_track(1)
-
-    def test_read_response_serial_exception(self, dfplayer_backend, mock_serial):
-        """Test handling serial read exception."""
-        mock_serial.read.side_effect = Exception("Read error")
-
-        response = dfplayer_backend.read_response()
-        assert response is None
-
-    def test_thread_safety(self, dfplayer_backend):
-        """Test that serial lock prevents concurrent access."""
-        import threading
-        import _thread
-
-        # This test verifies the lock exists and is used
-        assert hasattr(dfplayer_backend, 'serial_lock')
-        # threading.Lock() returns a _thread.lock object, not a threading.Lock type
-        assert isinstance(dfplayer_backend.serial_lock, type(threading.Lock()))
-
-
-class TestPlaybackControl:
-    """Test playback control methods."""
-
-    def test_play_method(self, dfplayer_backend, mock_serial):
-        """Test resume method (play alias)."""
-        dfplayer_backend.resume()
-        assert mock_serial.write.called
-
-    def test_pause_method(self, dfplayer_backend, mock_serial):
-        """Test pause method."""
-        dfplayer_backend.pause()
-        assert mock_serial.write.called
-
-    def test_next_track(self, dfplayer_backend, mock_serial):
-        """Test next track method."""
-        dfplayer_backend.next_track()
-
-        packet = mock_serial.write.call_args[0][0]
-        assert packet[3] == 0x01  # Next command
-
-    def test_previous_track(self, dfplayer_backend, mock_serial):
-        """Test previous track method."""
-        dfplayer_backend.prev_track()
-
-        packet = mock_serial.write.call_args[0][0]
-        assert packet[3] == 0x02  # Previous command
-
-
-class TestCleanup:
-    """Test resource cleanup."""
-
-    def test_cleanup_closes_serial(self, dfplayer_backend, mock_serial):
-        """Test cleanup closes serial port."""
-        dfplayer_backend.cleanup()
-
-        if hasattr(mock_serial, 'close'):
-            assert mock_serial.close.called or not mock_serial.is_open
-
-    def test_shutdown_alias(self, dfplayer_backend):
-        """Test shutdown is an alias for cleanup."""
-        # Verify shutdown method exists
-        assert hasattr(dfplayer_backend, 'shutdown')
-        # It should be callable
-        dfplayer_backend.shutdown()
+    return backend, fake_dfplayer
+
+
+def test_initialize_success_sets_volume(backend):
+    backend_instance, device = backend
+    assert backend_instance.device is device
+    assert device.last_volume == backend_instance.volume_level
+
+
+def test_initialize_fails_when_not_connected(monkeypatch):
+    fake = FakeDFPlayer(connected=False)
+    backend = DFPlayerBackend(port="/dev/null", dfplayer_factory=lambda p, b: fake)
+    monkeypatch.setattr(backend, "_start_listener", lambda: None)
+    ok = backend.initialize()
+    assert ok is False
+    assert backend.device is None
+
+
+def test_set_volume_clamps_and_delegates(backend):
+    backend_instance, device = backend
+    backend_instance.set_volume(99)
+    assert backend_instance.volume_level == 30
+    assert device.last_volume == 30
+    backend_instance.set_volume(-5)
+    assert backend_instance.volume_level == 0
+    assert device.last_volume == 0
+
+
+def test_playback_controls_delegate_to_device(backend):
+    backend_instance, device = backend
+    backend_instance.play()
+    backend_instance.pause()
+    backend_instance.stop()
+    backend_instance.next_track()
+    backend_instance.prev_track()
+    backend_instance.play_track(7)
+
+    assert device.play_calls == 1
+    assert device.pause_calls == 1
+    assert device.stop_calls == 1
+    assert device.next_calls == 1
+    assert device.prev_calls == 1
+    assert device.play_track_calls == [7]
+    # Track will be confirmed by 0x3E event; before that we only expect pending state
+    assert backend_instance.current_track is None
+    assert backend_instance.play_pending is True
+
+
+def test_poll_event_returns_enqueued_events(backend):
+    backend_instance, _ = backend
+    evt = {"type": "track_finished"}
+    backend_instance._event_queue.put(evt)
+    assert backend_instance.poll_event(timeout=0) == evt
+    assert backend_instance.poll_event(timeout=0) is None
+
+
+def test_listener_loop_enqueues_track_and_error_events(fake_dfplayer):
+    backend = DFPlayerBackend(port="/dev/null", dfplayer_factory=lambda p, b: fake_dfplayer)
+    backend._start_listener = lambda: None
+    backend.initialize()
+
+    # Track finished packet
+    def _read_response_track_finished(timeout=0.1):
+        backend._listener_running = False
+        return _build_packet(0x3D, 0x00, 0x00)
+
+    fake_dfplayer.read_response = _read_response_track_finished
+    backend._listener_running = True
+    backend._listener_loop()
+    evt = backend.poll_event(timeout=0)
+    assert evt == {"type": "track_finished"}
+
+    # Track started packet
+    def _read_response_track_started(timeout=0.1):
+        backend._listener_running = False
+        return _build_packet(0x3E, 0x00, 0x05)
+
+    fake_dfplayer.read_response = _read_response_track_started
+    backend._listener_running = True
+    backend._listener_loop()
+    evt = backend.poll_event(timeout=0)
+    assert evt == {"type": "track_started", "track": 5}
+
+    # Error packet
+    def _read_response_error(timeout=0.1):
+        backend._listener_running = False
+        return _build_packet(0x40, 0x00, 0x10)
+
+    fake_dfplayer.read_response = _read_response_error
+    backend._listener_running = True
+    backend._listener_loop()
+    evt = backend.poll_event(timeout=0)
+    assert evt == {"type": "error", "code": 0x10}
+
+
+def test_shutdown_and_cleanup_close_device(backend):
+    backend_instance, device = backend
+    backend_instance.shutdown()
+    assert device.stop_calls == 1
+    assert device.closed is True
+    assert backend_instance.device is None
+    assert backend_instance.playing is False
+
+    # cleanup should be safe to call after shutdown
+    backend_instance.cleanup()

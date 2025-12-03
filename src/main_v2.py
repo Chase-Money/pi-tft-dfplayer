@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
 """
-Main application entry point (v2) with profile selection.
+Legacy entry point (v2 era) with profile selection.
 
-Defaults to existing framebuffer+touch path. If DFPLAYER_HW_PROFILE=st7735_buttons,
-uses DisplayST7735 + ButtonInput with a minimal 128×128 UI.
-
-This file leaves src/main.py untouched and becomes the preferred entrypoint
-for new development per the v2 versioning rule.
+Canonical runtime entry is `src/main.py` (app_v2 + ConfigV2 + ScreenManagerV2).
+This file is retained for compatibility only; do not add new features here.
 """
 
 import atexit
@@ -29,7 +26,7 @@ from core.state import get_state
 from core.events import get_event_bus
 
 try:
-    from core.profile_select_v3 import detect_profile, select_hardware, import_by_path  # type: ignore
+    from core.hardware_profile import detect_profile, select_hardware, import_by_path  # type: ignore
 except Exception:  # pragma: no cover - fallback if v3 not available
     from core.profile_select_v2 import detect_profile, select_hardware, import_by_path  # type: ignore
 from utils.metadata import load_metadata, ArtworkCache

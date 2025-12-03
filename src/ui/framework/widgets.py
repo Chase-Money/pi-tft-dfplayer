@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from typing import Callable, List, Optional, Sequence, Tuple
 
@@ -9,6 +10,8 @@ from PIL import ImageDraw
 
 from .events import UIEvent
 from ..draw_utils import xywh_to_xyxy, clamp
+
+logger = logging.getLogger(__name__)
 
 
 Rect = Tuple[int, int, int, int]
@@ -23,6 +26,7 @@ class ButtonWidget:
         fill=(80, 110, 185),
         text_color=(255, 255, 255),
         radius: int = 16,
+        debug_log: bool = False,
     ) -> None:
         self.rect = rect
         self.label = label
@@ -31,37 +35,82 @@ class ButtonWidget:
         self.text_color = text_color
         self.radius = radius
         self._flash_until = 0.0
+        self._pressed = False
+        self._debug_log = debug_log
 
     def draw(self, draw: ImageDraw.ImageDraw, font) -> None:
         x, y, w, h = self.rect
         fill = self.fill
-        if time.monotonic() < self._flash_until:
+
+        # Pressed state: darken the button slightly
+        if self._pressed:
+            r, g, b = self.fill
+            fill = (max(0, int(r * 0.7)), max(0, int(g * 0.7)), max(0, int(b * 0.7)))
+        # Flash state: brighten the button
+        elif time.monotonic() < self._flash_until:
             r, g, b = self.fill
             fill = (min(255, int(r + (255 - r) * 0.35)),
                     min(255, int(g + (255 - g) * 0.35)),
                     min(255, int(b + (255 - b) * 0.35)))
+
         draw.rounded_rectangle(xywh_to_xyxy(self.rect), radius=self.radius, fill=fill)
         label = self.label() if callable(self.label) else self.label
         bbox = draw.textbbox((0, 0), label, font=font)
         tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
         draw.text((x + (w - tw) // 2, y + (h - th) // 2), label, font=font, fill=self.text_color)
+        if self._debug_log:
+            logger.debug(f"[BTN] rect={self.rect} label={label}")
 
     def handle_event(self, event: UIEvent) -> bool:
-        if event.type != "tap":
-            return False
         pos = event.get_point()
         if not pos:
             return False
-        if self._contains(pos):
-            self.on_press()
-            self._flash_until = time.monotonic() + 0.15
-            return True
+
+        label = self.label if isinstance(self.label, str) else self.label()
+
+        # Press event: show visual feedback only (don't trigger action yet)
+        # This allows user to cancel by dragging away before release
+        if event.type == "press":
+            if self._contains(pos, expand=4):
+                self._pressed = True
+                if self._debug_log:
+                    logger.debug(f"[BTN] '{label}' pressed at {pos}, rect={self.rect}")
+                return True
+            return False
+
+        # Drag event: cancel if user drags outside button bounds
+        if event.type == "drag":
+            if self._pressed and not self._contains(pos, expand=4):
+                self._pressed = False  # Cancel press if drag goes outside
+                if self._debug_log:
+                    logger.debug(f"[BTN] '{label}' press cancelled by drag outside bounds at {pos}")
+                return True
+            return self._pressed  # Consume drag events while pressed
+
+        # Tap/release events: trigger action only if still pressed and in bounds
+        if event.type in ("tap", "release"):
+            if self._pressed:
+                self._pressed = False
+                if self._contains(pos, expand=4):
+                    # User released inside button - trigger action
+                    if self._debug_log:
+                        logger.debug(f"[BTN] '{label}' activated on {event.type} at {pos}, rect={self.rect}")
+                    self.on_press()
+                    self._flash_until = time.monotonic() + 0.15
+                    return True
+                else:
+                    # User released outside button - cancel action
+                    if self._debug_log:
+                        logger.debug(f"[BTN] '{label}' press cancelled by {event.type} outside bounds at {pos}")
+                    return True
+            return False
+
         return False
 
-    def _contains(self, pos: Tuple[int, int]) -> bool:
+    def _contains(self, pos: Tuple[int, int], expand: int = 0) -> bool:
         x, y = pos
         rx, ry, rw, rh = self.rect
-        return rx <= x <= rx + rw and ry <= y <= ry + rh
+        return (rx - expand) <= x <= (rx + rw + expand) and (ry - expand) <= y <= (ry + rh + expand)
 
 
 class ListWidget:

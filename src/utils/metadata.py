@@ -6,6 +6,8 @@ Handles JSON metadata parsing and album artwork loading/caching.
 import json
 import logging
 import os
+import re
+from pathlib import Path
 from typing import Dict, Any, Optional
 from PIL import Image
 
@@ -16,45 +18,88 @@ def _validate_artwork_path(artwork_path: str, base_dir: str) -> Optional[str]:
     """
     Validate and resolve artwork path to prevent directory traversal attacks.
 
+    This function provides security against path traversal by:
+    - Rejecting paths with suspicious characters (null bytes, control chars)
+    - Resolving symlinks to detect traversal attempts
+    - Ensuring relative paths stay within base_dir
+    - Validating absolute paths against allowed prefixes
+
     Args:
-        artwork_path: Raw artwork path from metadata
+        artwork_path: Raw artwork path from metadata (relative or absolute)
         base_dir: Base directory for relative paths
 
     Returns:
-        str: Validated absolute path, or None if path is unsafe
+        Validated absolute path, or None if path is unsafe
+
+    Examples:
+        >>> _validate_artwork_path("artwork.jpg", "/boot/music/")
+        '/boot/music/artwork.jpg'
+        >>> _validate_artwork_path("../../etc/passwd", "/boot/music/")
+        None
     """
-    if not artwork_path:
+    if not artwork_path or not isinstance(artwork_path, str):
         return None
 
     try:
-        # If absolute path, validate it directly
+        # Reject paths with suspicious characters
+        suspicious_patterns = [
+            r'\x00',  # Null bytes
+            r'[\x01-\x1f]',  # Control characters (excluding newline for safety)
+        ]
+        for pattern in suspicious_patterns:
+            if re.search(pattern, artwork_path):
+                logger.warning(f"Artwork path contains suspicious characters: {artwork_path}")
+                return None
+
+        # Resolve to absolute path using pathlib (resolves symlinks)
         if os.path.isabs(artwork_path):
-            # Resolve to absolute path (resolves symlinks)
-            resolved = os.path.abspath(artwork_path)
-            # For absolute paths, we allow them but log a warning
-            logger.debug(f"Using absolute artwork path: {resolved}")
-            return resolved
+            # Absolute path - resolve and validate
+            resolved = Path(artwork_path).resolve()
+            resolved_str = str(resolved)
 
-        # For relative paths, resolve against base_dir
-        # First normalize to remove any .. or . components
-        normalized = os.path.normpath(artwork_path)
+            # For absolute paths, ensure they're in common safe directories
+            allowed_absolute_prefixes = ["/boot/", "/home/", "/media/", "/mnt/"]
+            path_is_safe = any(
+                resolved_str.startswith(prefix) for prefix in allowed_absolute_prefixes
+            )
 
-        # Reject if normalization introduces path traversal
-        if normalized.startswith('..') or normalized.startswith('/'):
-            logger.warning(f"Path traversal detected in: {artwork_path}")
+            if not path_is_safe:
+                logger.warning(
+                    f"Absolute artwork path outside allowed directories: {artwork_path} -> {resolved_str}"
+                )
+                return None
+
+            logger.debug(f"Validated absolute artwork path: {resolved_str}")
+            return resolved_str
+
+        # Relative path - must stay within base_dir
+        # First check for obvious traversal attempts
+        if artwork_path.startswith('..') or '/../' in artwork_path or artwork_path.endswith('/..'):
+            logger.warning(f"Path traversal attempt detected: {artwork_path}")
             return None
 
-        # Join with base_dir and resolve to absolute path
-        full_path = os.path.join(base_dir, normalized)
-        resolved = os.path.abspath(full_path)
+        # Resolve relative to base_dir
+        base_path = Path(base_dir).resolve()
+        full_path = (base_path / artwork_path).resolve()
+        full_path_str = str(full_path)
 
-        # Ensure resolved path is within base_dir
-        base_abs = os.path.abspath(base_dir)
-        if not resolved.startswith(base_abs + os.sep) and resolved != base_abs:
-            logger.warning(f"Path escapes base directory: {artwork_path} -> {resolved}")
+        # Ensure resolved path is within base_dir (using pathlib.is_relative_to would be cleaner in Python 3.9+)
+        base_str = str(base_path)
+        if not base_str.endswith(os.sep):
+            base_str += os.sep
+
+        # Check if resolved path is within base directory
+        if not (full_path_str.startswith(base_str) or full_path_str == str(base_path)):
+            logger.warning(
+                f"Relative artwork path escapes base directory:\n"
+                f"  Input: {artwork_path}\n"
+                f"  Base: {base_dir}\n"
+                f"  Resolved: {full_path_str}"
+            )
             return None
 
-        return resolved
+        logger.debug(f"Validated relative artwork path: {artwork_path} -> {full_path_str}")
+        return full_path_str
 
     except Exception as e:
         logger.error(f"Error validating artwork path {artwork_path}: {e}")
