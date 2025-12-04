@@ -14,12 +14,19 @@ logger = logging.getLogger(__name__)
 
 
 class DFPlayerBackend(PlaybackBackend):
-    """Playback backend that wraps the hardware DFPlayer interface."""
+    """Playback backend that wraps the hardware DFPlayer interface.
+
+    Security: Requires access to serial port (default: /dev/serial0).
+    On multi-user systems, this requires appropriate permissions (typically root/dialout group).
+    The systemd service runs as user 'chase' with dialout group membership.
+    """
 
     DEFAULT_VOLUME = 18
     EVENT_QUEUE_SIZE = 100
     DROP_WARN_STEP = 10
-    SERIAL_TIMEOUT = 2.0  # Maximum time to wait for serial operations (seconds)
+    # Timeout for serial operations - DFPlayer Mini typically responds within 100ms,
+    # but allow 2s buffer for slow SD cards or busy hardware states
+    SERIAL_TIMEOUT = 2.0
 
     def __init__(self, port: str = '/dev/serial0', baudrate: int = 9600,
                  dfplayer_factory: Optional[Callable[[str, int], DFPlayer]] = None):
@@ -137,11 +144,13 @@ class DFPlayerBackend(PlaybackBackend):
                                 self.playing = False
                                 self.play_pending = False
                         except Exception as exc:
-                            # State already False, no need to reset
+                            # Ensure consistent state on failure
+                            self._reset_state_on_error(clear_track=False)
                             logger.error(f"Failed to pause: {exc}")
                             raise
         except TimeoutError as e:
             logger.error(f"Pause operation timed out: {e}")
+            self._reset_state_on_error(clear_track=False)
             raise
 
     def stop(self):

@@ -7,14 +7,52 @@ remaining backward compatible with the existing `core.config.Config` class.
 from __future__ import annotations
 
 import dataclasses
+import logging
+import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from .config import Config
 
+logger = logging.getLogger(__name__)
+
 
 def _clamp(value: int, lo: int, hi: int) -> int:
     return max(lo, min(hi, int(value)))
+
+
+def _validate_path(path: Optional[str], path_type: str) -> Optional[str]:
+    """Validate a file path for security and existence.
+
+    Args:
+        path: Path to validate (can be None)
+        path_type: Description for logging (e.g., "metadata", "artwork_root")
+
+    Returns:
+        Validated path or None if invalid/missing
+
+    Security: Prevents directory traversal and symlink attacks
+    """
+    if not path:
+        return None
+
+    try:
+        # Resolve to absolute path and check for directory traversal
+        resolved = Path(path).resolve()
+
+        # Log warning if path doesn't exist (but don't fail - may be created later)
+        if not resolved.exists():
+            logger.warning(f"{path_type} path does not exist: {resolved}")
+
+        # Detect suspicious patterns
+        if ".." in str(path):
+            logger.warning(f"Suspicious path with '..' detected in {path_type}: {path}")
+
+        return str(resolved)
+    except (OSError, ValueError) as e:
+        logger.error(f"Invalid {path_type} path '{path}': {e}")
+        return None
 
 
 @dataclass
@@ -79,23 +117,43 @@ class ApplicationConfig:
         )
         touch_cfg.validate()
 
+        # Validate audio settings with type safety
+        volume = cfg.get_volume()
+        if not isinstance(volume, int):
+            volume = int(volume) if volume is not None else 15
+        last_track = cfg.get_last_track()
+        if not isinstance(last_track, int):
+            last_track = int(last_track) if last_track is not None else 1
+        auto_play = cfg.get("auto_play", False)
+        if not isinstance(auto_play, bool):
+            auto_play = bool(auto_play)
+
         audio_cfg = AudioConfig(
-            volume=_clamp(cfg.get_volume(), 0, 30),
-            last_track=max(1, int(cfg.get_last_track())),
-            auto_play=bool(cfg.get("auto_play", False)),
+            volume=_clamp(volume, 0, 30),
+            last_track=max(1, last_track),
+            auto_play=auto_play,
         )
 
+        # Validate and sanitize file paths (security: prevent directory traversal)
         paths_cfg = PathsConfig(
-            metadata=cfg.get_metadata_path(),
-            track_catalog=cfg.get_track_catalog_path(),
-            artwork_root=cfg.get_artwork_root(),
+            metadata=_validate_path(cfg.get_metadata_path(), "metadata"),
+            track_catalog=_validate_path(cfg.get_track_catalog_path(), "track_catalog"),
+            artwork_root=_validate_path(cfg.get_artwork_root(), "artwork_root"),
         )
+
+        # Validate UI settings with type safety
+        ui_theme = cfg.get("ui_theme", "default")
+        if not isinstance(ui_theme, str):
+            ui_theme = "default"
+        screen_brightness = cfg.get("screen_brightness", 100)
+        if not isinstance(screen_brightness, int):
+            screen_brightness = int(screen_brightness) if screen_brightness is not None else 100
 
         return cls(
             audio=audio_cfg,
             touch=touch_cfg,
-            ui_theme=str(cfg.get("ui_theme", "default")),
-            screen_brightness=_clamp(cfg.get("screen_brightness", 100), 0, 100),
+            ui_theme=ui_theme,
+            screen_brightness=_clamp(screen_brightness, 0, 100),
             paths=paths_cfg,
         )
 

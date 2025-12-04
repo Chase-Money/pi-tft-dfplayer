@@ -41,14 +41,17 @@ def timeout_guard(seconds: float, operation_name: str = "operation"):
         yield
         return
 
-    old_handler = signal.signal(signal.SIGALRM, timeout_handler)
-    signal.setitimer(signal.ITIMER_REAL, seconds)
-
+    old_handler = None
     try:
+        # Set up signal handler and timer inside try block to ensure cleanup
+        old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+        signal.setitimer(signal.ITIMER_REAL, seconds)
         yield
     finally:
+        # Always clean up timer and restore handler
         signal.setitimer(signal.ITIMER_REAL, 0)
-        signal.signal(signal.SIGALRM, old_handler)
+        if old_handler is not None:
+            signal.signal(signal.SIGALRM, old_handler)
 
 
 def call_with_timeout(func: Callable, timeout: float, operation_name: str = "operation",
