@@ -33,7 +33,10 @@ class Application:
     # Performance constants
     TARGET_FPS = 30  # Target frame rate for UI rendering
     MAX_EVENTS_PER_FRAME = 100  # Safety limit for backend event processing
-    WATCHDOG_INTERVAL = 30.0  # Watchdog heartbeat interval in seconds
+    # Watchdog heartbeat logs at INFO level to detect freezes. Set to higher value
+    # (e.g., 300.0 for 5min) for long-running devices to reduce log spam, or disable
+    # entirely by setting to 0 (not recommended for production).
+    WATCHDOG_INTERVAL = 300.0  # Watchdog heartbeat interval in seconds (5 minutes)
 
     def __init__(self, config=None) -> None:
         self.config: Config = config or Config()
@@ -109,6 +112,13 @@ class Application:
         self._last_watchdog_time = 0.0
         self._frame_count = 0
 
+        # Status message display
+        self._status_message: Optional[str] = None
+        self._status_level: str = "info"
+        self._status_expires_at: float = 0.0
+        self._status_changed: bool = False
+        self._status_was_visible: bool = False  # Track if status was visible last frame
+
         atexit.register(self.cleanup)
 
     def _load_tracks_and_metadata(self) -> None:
@@ -179,6 +189,13 @@ class Application:
                 if ui_evt:
                     self.screen_manager.handle_event(ui_evt)
                     refreshed = True
+
+            # Check if status message visibility changed (new message or expiration)
+            status_visible = self.get_status() is not None
+            if self._status_changed or (status_visible != self._status_was_visible):
+                refreshed = True
+                self._status_changed = False
+                self._status_was_visible = status_visible
 
             if refreshed:
                 # Force full screen refresh after screen navigation to prevent artifacts
@@ -290,16 +307,24 @@ class Application:
 
     def get_status(self) -> Optional[Tuple[str, str]]:
         """Return optional status banner (message, level) for UI display."""
+        if self._status_message and time.monotonic() < self._status_expires_at:
+            return (self._status_message, self._status_level)
         return None
 
     def set_status(self, message: str, level: str = "info", timeout: int = 3) -> None:
         """
         Set temporary status message for UI display.
 
-        Currently logs the status message. Future enhancement: implement
-        a status message queue with timeout for on-screen notifications.
+        Args:
+            message: The status message to display
+            level: Message level (info, warning, error)
+            timeout: How many seconds to display the message
         """
         logger.info(f"Status [{level}]: {message}")
+        self._status_message = message
+        self._status_level = level
+        self._status_expires_at = time.monotonic() + timeout
+        self._status_changed = True
 
     def get_touch_driver_bounds(self) -> Optional[Tuple[int, int, int, int]]:
         """Get raw touch driver bounds (min_x, max_x, min_y, max_y)."""
