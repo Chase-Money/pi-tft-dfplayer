@@ -31,12 +31,30 @@ class CalibrationScreen(ScreenView):
         self.flash_until = 0.0  # For visual feedback on tap
         # Position back button on right side to avoid covering top-left target
         self.back_button = ButtonWidget((384, 4, 80, 40), "Back", self._exit)
+        # Save original orientation to restore after calibration
+        self.saved_orientation = None
 
     # ------------------------------------------------------------------
     def on_enter(self, **kwargs):
+        import logging
+        logger = logging.getLogger(__name__)
+
         app = self._app()
         width = app.framebuffer.width if app and app.framebuffer else 480
         height = app.framebuffer.height if app and app.framebuffer else 320
+
+        # Save current orientation and disable it for calibration
+        # Calibration needs raw coordinates without any transformation
+        if app and hasattr(app, 'get_touch_orientation'):
+            self.saved_orientation = app.get_touch_orientation()
+            logger.info(f"Saved orientation for calibration: {self.saved_orientation}")
+
+            # Disable orientation transform (identity transform)
+            if hasattr(app, 'touch_controller') and app.touch_controller:
+                app.touch_controller.set_orientation(swap_xy=False, flip_x=False, flip_y=False)
+                logger.info("Disabled orientation transform for calibration")
+                app.set_status("Orientation disabled for calibration", "info", 2)
+
         # Scale offset based on screen size (40px at 480px wide, ~11px at 128px wide)
         scale = min(width / 480.0, height / 320.0)
         offset = max(10, int(TARGET_OFFSETS * scale))
@@ -179,6 +197,7 @@ class CalibrationScreen(ScreenView):
             # Need at least half the samples to be valid
             if len(valid_samples) < len(target_samples) // 2:
                 app.set_status("Too many invalid samples; retry calibration", "error", 4)
+                self._restore_orientation()
                 self.manager.pop()
                 return
 
@@ -190,6 +209,7 @@ class CalibrationScreen(ScreenView):
 
         if len(median_samples) != 4:
             app.set_status("Calibration failed: missing samples", "error", 4)
+            self._restore_orientation()
             self.manager.pop()
             return
 
@@ -217,8 +237,9 @@ class CalibrationScreen(ScreenView):
             logger.error(f"Calibration span too small: X={actual_span_x} Y={actual_span_y} (min={min_span})")
             logger.error(f"  Bounds: left={left_x} right={right_x} top={top_y} bottom={bottom_y}")
             logger.error(f"  Raw samples: {median_samples}")
-            logger.error(f"  This usually means touch orientation is wrong!")
-            app.set_status("Touch orientation wrong! Try Settings->Orientation first", "error", 6)
+            logger.error(f"  Hardware issue or not tapping corners correctly!")
+            app.set_status("Calibration failed: tap the corners accurately", "error", 5)
+            self._restore_orientation()
             self.manager.pop()
             return
 
@@ -239,25 +260,52 @@ class CalibrationScreen(ScreenView):
                 logger.error(f"  Required: X={min_required_x} Y={min_required_y} (5% of {span_x}x{span_y})")
                 logger.error(f"  Raw samples: {median_samples}")
                 app.set_status(f"Need {min_required_x}x{min_required_y}, got {actual_span_x}x{actual_span_y}", "error", 5)
+                self._restore_orientation()
                 self.manager.pop()
                 return
             if not (min_x <= left_x < right_x <= max_x and min_y <= top_y < bottom_y <= max_y):
                 app.set_status("Calibration out of bounds; retry", "error", 4)
+                self._restore_orientation()
                 self.manager.pop()
                 return
 
         # Final sanity to avoid inverted coordinates
         if left_x >= right_x or top_y >= bottom_y:
             app.set_status("Invalid calibration: please retry", "error", 4)
+            self._restore_orientation()
             self.manager.pop()
             return
 
         app.set_touch_calibration(left_x, right_x, top_y, bottom_y)
         app.set_status("Calibration saved", "success", 3)
+
+        # Restore original orientation
+        self._restore_orientation()
+
         self.manager.pop()
+
+    def _restore_orientation(self) -> None:
+        """Restore the orientation settings that were saved before calibration."""
+        import logging
+        logger = logging.getLogger(__name__)
+
+        app = self._app()
+        if not app or not self.saved_orientation:
+            return
+
+        if hasattr(app, 'touch_controller') and app.touch_controller:
+            app.touch_controller.set_orientation(
+                swap_xy=self.saved_orientation.get('swap_xy', False),
+                flip_x=self.saved_orientation.get('flip_x', False),
+                flip_y=self.saved_orientation.get('flip_y', False)
+            )
+            logger.info(f"Restored orientation after calibration: {self.saved_orientation}")
+            app.set_status("Orientation restored", "info", 2)
 
     def _app(self):
         return self.services.get("app") if self.services else None
 
     def _exit(self):
+        # Restore orientation before exiting
+        self._restore_orientation()
         self.manager.pop()
