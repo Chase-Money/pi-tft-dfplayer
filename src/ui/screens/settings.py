@@ -61,13 +61,6 @@ class SettingsScreen(ScreenView):
             self.cal_button = ButtonWidget((margin, cal_y, button_w, button_h), "Calibrate Touch", self._open_calibration, debug_log=dbg)
             self._last_resolution = current_res
 
-        # Draw status banner
-        app = self._app()
-        if app:
-            status = app.get_status()
-            if status:
-                draw_status_banner(draw, status[0], w, fonts, status[1])
-
         # Draw title and labels
         margin = max(4, int(16 * scale))
         title_y = max(16, int(50 * scale))
@@ -123,16 +116,16 @@ class SettingsScreen(ScreenView):
         try:
             if app.touch_controller:
                 app.touch_controller.set_orientation(
-                    swap_xy=orient["SWAP_XY"],
-                    flip_x=orient["FLIP_X"],
-                    flip_y=orient["FLIP_Y"],
+                    swap_xy=orient["swap_xy"],
+                    flip_x=orient["flip_x"],
+                    flip_y=orient["flip_y"],
                 )
             # Persist
             if hasattr(app, "config"):
                 app.config.set_touch_orientation(
-                    swap_xy=orient["SWAP_XY"],
-                    flip_x=orient["FLIP_X"],
-                    flip_y=orient["FLIP_Y"]
+                    swap_xy=orient["swap_xy"],
+                    flip_x=orient["flip_x"],
+                    flip_y=orient["flip_y"]
                 )
                 app.config.set_touch_orientation_index(self._orientation_idx)
                 save_result = app.config.save()

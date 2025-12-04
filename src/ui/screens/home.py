@@ -78,13 +78,6 @@ class HomeScreen(ScreenView):
             ]
             self._last_resolution = current_res
 
-        # Draw status banner if present
-        app = self._app()
-        if app:
-            status = app.get_status()
-            if status:
-                draw_status_banner(draw, status[0], w, context["fonts"], status[1])
-
         # Draw title
         draw.text((margin, title_y), "DFPlayer", font=font_large, fill=palette.text)
 

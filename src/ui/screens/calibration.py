@@ -205,11 +205,23 @@ class CalibrationScreen(ScreenView):
             bottom_y = top_y + 1
 
         # Sanity checks: minimum span and within expected bounds (12-bit default)
+        # TEMPORARY: If span is extremely small (< 20px), likely orientation is wrong
+        # Save the calibration anyway and warn user to fix orientation first
         min_span = 20
-        if (right_x - left_x) < min_span or (bottom_y - top_y) < min_span:
-            app.set_status("Calibration span too small; retry", "error", 4)
+        actual_span_x = right_x - left_x
+        actual_span_y = bottom_y - top_y
+
+        if actual_span_x < min_span or actual_span_y < min_span:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Calibration span too small: X={actual_span_x} Y={actual_span_y} (min={min_span})")
+            logger.error(f"  Bounds: left={left_x} right={right_x} top={top_y} bottom={bottom_y}")
+            logger.error(f"  Raw samples: {median_samples}")
+            logger.error(f"  This usually means touch orientation is wrong!")
+            app.set_status("Touch orientation wrong! Try Settings->Orientation first", "error", 6)
             self.manager.pop()
             return
+
         # If driver bounds available, enforce them
         bounds = app.get_touch_driver_bounds() if hasattr(app, "get_touch_driver_bounds") else None
         if bounds:
@@ -218,8 +230,15 @@ class CalibrationScreen(ScreenView):
             span_y = max_y - min_y
             min_required_x = max(min_span, int(0.05 * span_x))
             min_required_y = max(min_span, int(0.05 * span_y))
-            if (right_x - left_x) < min_required_x or (bottom_y - top_y) < min_required_y:
-                app.set_status("Calibration span too small; retry", "error", 4)
+
+            if actual_span_x < min_required_x or actual_span_y < min_required_y:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Calibration span below 5% threshold:")
+                logger.error(f"  Actual: X={actual_span_x} Y={actual_span_y}")
+                logger.error(f"  Required: X={min_required_x} Y={min_required_y} (5% of {span_x}x{span_y})")
+                logger.error(f"  Raw samples: {median_samples}")
+                app.set_status(f"Need {min_required_x}x{min_required_y}, got {actual_span_x}x{actual_span_y}", "error", 5)
                 self.manager.pop()
                 return
             if not (min_x <= left_x < right_x <= max_x and min_y <= top_y < bottom_y <= max_y):

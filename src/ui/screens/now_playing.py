@@ -67,13 +67,6 @@ class NowPlayingScreen(ScreenView):
         self.play_button = ButtonWidget((margin, button_y, play_w, button_h), self._play_label, self._toggle_play, debug_log=dbg)
         self.slider = SliderWidget((margin, slider_y, int(w * 0.7), slider_h))
 
-        # Draw status banner
-        app = self.services.get("app") if self.services else None
-        if app:
-            status = app.get_status()
-            if status:
-                draw_status_banner(draw, status[0], w, fonts, status[1])
-
         # Draw back button
         self.back_button.draw(draw, fonts["small"])
 

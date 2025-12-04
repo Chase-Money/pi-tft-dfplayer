@@ -61,13 +61,6 @@ class TrackBrowserScreen(ScreenView):
             self.back_button = ButtonWidget((margin, small_margin, back_w, button_h), "Back", self.manager.pop, debug_log=dbg)
             self._last_resolution = current_res
 
-        # Draw status banner
-        app = self.services.get("app") if self.services else None
-        if app:
-            status = app.get_status()
-            if status:
-                draw_status_banner(draw, status[0], w, fonts, status[1])
-
         # Draw title centered (or offset for smaller screens)
         title_x = max(margin, int(w * 0.3))
         draw.text((title_x, title_y), "Tracks", font=fonts["medium"], fill=palette.text)
