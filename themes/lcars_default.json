@@ -9,6 +9,7 @@
     "text": "#f0f0f5",
     "text_dim": "#5a606e",
     "accents": ["#f2b84b", "#f47e6a", "#7e5ba6", "#3ab6c5", "#7fa3d9"],
+    "status_info": "#2196F3",
     "status_good": "#3ab6c5",
     "status_warn": "#f2b84b",
     "status_bad": "#f47e6a"

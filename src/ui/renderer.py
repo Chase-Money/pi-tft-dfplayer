@@ -272,6 +272,7 @@ class FramebufferRendererV2:
         Render status message banner at bottom of screen (if any).
 
         Gets status from the app instance via screen manager services.
+        Uses theme colors for consistency with the rest of the UI.
         """
         # Get app instance from screen manager services
         if not self.screen_manager or not hasattr(self.screen_manager, 'services'):
@@ -288,14 +289,38 @@ class FramebufferRendererV2:
 
         message, level = status
 
-        # Color scheme for different status levels
-        colors = {
-            "info": ("#2196F3", "#FFFFFF"),      # Blue background, white text
-            "warning": ("#FF9800", "#000000"),   # Orange background, black text
-            "error": ("#F44336", "#FFFFFF"),     # Red background, white text
-            "success": ("#4CAF50", "#FFFFFF"),   # Green background, white text
+        # Get theme colors (with fallbacks if theme not available)
+        try:
+            from ui.theme import load_theme
+            theme = load_theme(None)
+            palette = theme.palette if theme else {}
+        except Exception:
+            palette = {}
+
+        # Map status levels to theme palette keys (with hardcoded fallbacks)
+        theme_mappings = {
+            "info": ("status_info", "#2196F3"),
+            "success": ("status_good", "#4CAF50"),
+            "warning": ("status_warn", "#FF9800"),
+            "error": ("status_bad", "#F44336"),
         }
-        bg_color, text_color = colors.get(level, colors["info"])
+
+        theme_key, fallback = theme_mappings.get(level, ("status_info", "#2196F3"))
+        bg_color = palette.get(theme_key, fallback)
+
+        # Determine text color based on background (light text for dark bg, dark text for light bg)
+        # Use theme text color if available, otherwise choose based on background
+        try:
+            # Parse background color to determine if it's light or dark
+            if isinstance(bg_color, str) and bg_color.startswith('#'):
+                r, g, b = int(bg_color[1:3], 16), int(bg_color[3:5], 16), int(bg_color[5:7], 16)
+                # Use perceived luminance formula
+                luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+                text_color = palette.get("text", "#FFFFFF") if luminance < 0.5 else palette.get("bg", "#000000")
+            else:
+                text_color = palette.get("text", "#FFFFFF")
+        except Exception:
+            text_color = "#FFFFFF"  # Safe fallback
 
         # Position at bottom of screen
         banner_height = self.scale_value(30, "height")
