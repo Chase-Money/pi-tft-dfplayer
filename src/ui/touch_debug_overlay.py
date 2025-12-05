@@ -32,20 +32,36 @@ class TouchDebugOverlay:
         # Get image dimensions from draw object
         width, height = draw.im.size
 
-        # Draw crosshairs (red)
-        draw.line((0, y, width, y), fill=(255, 0, 0), width=2)
-        draw.line((x, 0, x, height), fill=(255, 0, 0), width=2)
+        # Draw crosshairs (bright red, thicker lines for visibility)
+        draw.line((0, y, width, y), fill=(255, 0, 0), width=3)
+        draw.line((x, 0, x, height), fill=(255, 0, 0), width=3)
 
-        # Draw circle at touch point
-        radius = 10
+        # Draw circle at touch point (bright red)
+        radius = 12
         draw.ellipse((x - radius, y - radius, x + radius, y + radius),
-                     outline=(255, 0, 0), width=3)
+                     outline=(255, 0, 0), width=4)
 
-        # Draw coordinates (yellow text)
+        # Draw coordinates with background box for visibility
         coord_text = f"Touch: ({x}, {y})"
-        text_x = min(x + 15, width - 100)  # Keep text on screen
-        text_y = max(y - 20, 10)
+        text_x = min(x + 15, width - 120)  # Keep text on screen
+        text_y = max(y - 25, 5)
 
+        # Draw semi-transparent background box behind text
+        if font:
+            bbox = draw.textbbox((text_x, text_y), coord_text, font=font)
+        else:
+            # Estimate bbox if no font
+            bbox = (text_x, text_y, text_x + 110, text_y + 15)
+
+        # Black background box with padding
+        padding = 3
+        draw.rectangle(
+            (bbox[0] - padding, bbox[1] - padding,
+             bbox[2] + padding, bbox[3] + padding),
+            fill=(0, 0, 0)
+        )
+
+        # Draw bright yellow text on top
         if font:
             draw.text((text_x, text_y), coord_text, font=font, fill=(255, 255, 0))
         else:
