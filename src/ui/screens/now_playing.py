@@ -59,11 +59,14 @@ class NowPlayingScreen(ScreenView):
         artwork_size = min(int(w * 0.6), int(h * 0.4), max(60, int(120 * scale)))
         title_y = artwork_y + artwork_size + max(4, int(8 * scale))
         slider_y = title_y + max(12, int(20 * scale))
-        button_y = slider_y + slider_h + max(8, int(12 * scale))
+        # Increase spacing between slider and button to prevent hit area overlap
+        button_y = slider_y + slider_h + max(12, int(18 * scale))
 
         dbg = debug_tap_logging_enabled()
         # Create widgets dynamically based on resolution
-        self.back_button = ButtonWidget((margin, small_margin, back_w, button_h), "Back", self.manager.pop, debug_log=dbg)
+        # Position back button on right side to avoid interfering with play indicator
+        back_x = w - margin - back_w
+        self.back_button = ButtonWidget((back_x, small_margin, back_w, button_h), "Back", self.manager.pop, debug_log=dbg)
         self.play_button = ButtonWidget((margin, button_y, play_w, button_h), self._play_label, self._toggle_play, debug_log=dbg)
         self.slider = SliderWidget((margin, slider_y, int(w * 0.7), slider_h))
 
@@ -151,7 +154,8 @@ class NowPlayingScreen(ScreenView):
     def _inside_slider(self, pos):
         x, y = pos
         rx, ry, rw, rh = self.slider.rect
-        return rx <= x <= rx + rw and ry - 10 <= y <= ry + rh + 10
+        # Reduce vertical expansion to avoid interfering with play button below
+        return rx <= x <= rx + rw and ry - 8 <= y <= ry + rh + 4
 
     def _set_volume_from_x(self, px):
         rx, _, rw, _ = self.slider.rect

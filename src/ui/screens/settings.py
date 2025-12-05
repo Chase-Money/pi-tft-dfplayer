@@ -56,7 +56,9 @@ class SettingsScreen(ScreenView):
             cal_y = orient_y + button_h + max(12, int(20 * scale))
 
             dbg = debug_tap_logging_enabled()
-            self.back_button = ButtonWidget((margin, small_margin, back_w, max(16, int(40 * scale))), "Back", self.manager.pop, debug_log=dbg)
+            # Position back button on right side
+            back_x = w - margin - back_w
+            self.back_button = ButtonWidget((back_x, small_margin, back_w, max(16, int(40 * scale))), "Back", self.manager.pop, debug_log=dbg)
             self.orientation_button = ButtonWidget((margin, orient_y, button_w, button_h), self._orientation_label, self._cycle_orientation, debug_log=dbg)
             self.cal_button = ButtonWidget((margin, cal_y, button_w, button_h), "Calibrate Touch", self._open_calibration, debug_log=dbg)
             self._last_resolution = current_res

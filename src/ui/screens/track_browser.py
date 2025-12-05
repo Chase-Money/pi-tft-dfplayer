@@ -58,7 +58,9 @@ class TrackBrowserScreen(ScreenView):
         current_res = (w, h)
         if current_res != self._last_resolution:
             dbg = debug_tap_logging_enabled()
-            self.back_button = ButtonWidget((margin, small_margin, back_w, button_h), "Back", self.manager.pop, debug_log=dbg)
+            # Position back button on right side
+            back_x = w - margin - back_w
+            self.back_button = ButtonWidget((back_x, small_margin, back_w, button_h), "Back", self.manager.pop, debug_log=dbg)
             self._last_resolution = current_res
 
         # Draw title centered (or offset for smaller screens)

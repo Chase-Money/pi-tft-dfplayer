@@ -12,7 +12,12 @@
       "Bash(git push:*)",
       "Bash(git mv:*)",
       "Bash(git rm:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(timeout 5 ssh:*)",
+      "Bash(rsync:*)",
+      "Bash(scp:*)",
+      "Bash(Settings-)",
+      "Bash(Orientation first\" for better user guidance\n\nResolves: Status messages appearing twice (top and bottom) after\nreturning from calibration screen\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")"
     ],
     "deny": [],
     "ask": []

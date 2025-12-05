@@ -29,8 +29,8 @@ class CalibrationScreen(ScreenView):
         self.sample_count = 0  # Samples collected for current target
         self.message = "Tap the highlighted points"
         self.flash_until = 0.0  # For visual feedback on tap
-        # Position back button on right side to avoid covering top-left target
-        self.back_button = ButtonWidget((384, 4, 80, 40), "Back", self._exit)
+        # Back button will be created in render() based on resolution
+        self.back_button = None
         # Save original orientation to restore after calibration
         self.saved_orientation = None
 
@@ -75,8 +75,18 @@ class CalibrationScreen(ScreenView):
         image: Image.Image = context["image"]
         draw: ImageDraw.ImageDraw = context["draw"]
         fonts = context["fonts"]
+        w, h = image.width, image.height
 
-        draw.rectangle((0, 0, image.width, image.height), fill=(8, 10, 16))
+        # Create back button positioned on right side (only shown after calibration completes)
+        if not self.back_button:
+            back_w = max(30, int(80 * (min(w / 480.0, h / 320.0))))
+            button_h = max(16, int(40 * (min(w / 480.0, h / 320.0))))
+            margin = max(4, int(16 * (min(w / 480.0, h / 320.0))))
+            small_margin = max(2, int(4 * (min(w / 480.0, h / 320.0))))
+            back_x = w - margin - back_w
+            self.back_button = ButtonWidget((back_x, small_margin, back_w, button_h), "Back", self._exit)
+
+        draw.rectangle((0, 0, w, h), fill=(8, 10, 16))
 
         # Instructions
         draw.text((16, 50), self.message, font=fonts.get("medium"), fill=(230, 230, 230))

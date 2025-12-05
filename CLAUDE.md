@@ -11,8 +11,12 @@ DIY touchscreen MP3 player for Raspberry Pi Zero 2 W with a 3.5″ SPI TFT displ
 You are the **HEAVY OPERATOR**.
 
 **Before making changes:**
+- Check `@docs/ai/TASK_LOG.md` for recent activities and maintain continuity between developers
 - Read `/docs/ai/PROJECT_GUIDE.md` and `/docs/ai/CODING_STANDARDS.md` (if they exist)
 - Summarize your plan in the PR description or commit message
+
+**After any actions or changes:**
+- Log all activities in `@docs/ai/TASK_LOG.md` to maintain continuity between developers
 
 **You MAY run commands, but:**
 - Prefer `git status`, `pytest`, `npm test`, etc.

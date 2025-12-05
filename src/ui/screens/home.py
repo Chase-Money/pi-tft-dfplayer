@@ -56,6 +56,7 @@ class HomeScreen(ScreenView):
         current_res = (w, h)
         if current_res != self._last_resolution:
             dbg = debug_tap_logging_enabled()
+            # Note: Home screen has no back button since it's the root screen
             self.buttons = [
                 ButtonWidget(
                     (margin, start_y, button_width, button_height),

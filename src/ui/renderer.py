@@ -289,6 +289,9 @@ class FramebufferRendererV2:
 
         message, level = status
 
+        # Debug logging to track duplicate renders
+        logger.debug(f"Rendering status message: '{message}' ({level}) at banner_y={self.height - self.scale_value(30, 'height')}")
+
         # Get theme colors (with fallbacks if theme not available)
         try:
             from ui.theme import load_theme
