@@ -131,7 +131,8 @@ class FramebufferRendererV2:
         This is the main rendering entry point. It:
         1. Clears the backbuffer
         2. Calls the current screen's render method
-        3. Does NOT present to framebuffer (call present() for that)
+        3. Renders status messages (if any)
+        4. Does NOT present to framebuffer (call present() for that)
         """
         if not self.screen_manager:
             logger.warning("No screen manager attached to renderer")
@@ -154,6 +155,9 @@ class FramebufferRendererV2:
 
         # Let the screen manager render the current screen
         self.screen_manager.render(context)
+
+        # Render status message overlay (if any)
+        self._render_status_message()
 
     def present(self, dirty_rects=None) -> None:
         """
@@ -262,6 +266,59 @@ class FramebufferRendererV2:
             # Use minimum scale factor for uniform scaling
             scale = min(self.width / 480.0, self.height / 320.0)
             return int(value * scale)
+
+    def _render_status_message(self) -> None:
+        """
+        Render status message banner at bottom of screen (if any).
+
+        Gets status from the app instance via screen manager services.
+        """
+        # Get app instance from screen manager services
+        if not self.screen_manager or not hasattr(self.screen_manager, 'services'):
+            return
+
+        app = self.screen_manager.services.get('app')
+        if not app or not hasattr(app, 'get_status'):
+            return
+
+        # Check if there's a status message to display
+        status = app.get_status()
+        if not status:
+            return
+
+        message, level = status
+
+        # Color scheme for different status levels
+        colors = {
+            "info": ("#2196F3", "#FFFFFF"),      # Blue background, white text
+            "warning": ("#FF9800", "#000000"),   # Orange background, black text
+            "error": ("#F44336", "#FFFFFF"),     # Red background, white text
+            "success": ("#4CAF50", "#FFFFFF"),   # Green background, white text
+        }
+        bg_color, text_color = colors.get(level, colors["info"])
+
+        # Position at bottom of screen
+        banner_height = self.scale_value(30, "height")
+        banner_y = self.height - banner_height
+
+        # Draw background banner
+        self.draw.rectangle(
+            [(0, banner_y), (self.width, self.height)],
+            fill=bg_color
+        )
+
+        # Draw message text centered
+        font = self.get_font("medium")
+
+        # Get text bounding box for centering
+        bbox = self.draw.textbbox((0, 0), message, font=font)
+        text_width = bbox[2] - bbox[0]
+        text_height = bbox[3] - bbox[1]
+
+        text_x = (self.width - text_width) // 2
+        text_y = banner_y + (banner_height - text_height) // 2
+
+        self.draw.text((text_x, text_y), message, fill=text_color, font=font)
 
     def close(self) -> None:
         """Clean up renderer resources."""

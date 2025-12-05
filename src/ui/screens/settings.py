@@ -112,6 +112,9 @@ class SettingsScreen(ScreenView):
         return f"Orientation {self._orientation_idx + 1}/8"
 
     def _cycle_orientation(self) -> None:
+        import logging
+        logger = logging.getLogger(__name__)
+
         app = self._app()
         if not app or not hasattr(app, "touch_controller"):
             return
@@ -132,10 +135,15 @@ class SettingsScreen(ScreenView):
                     flip_y=orient["FLIP_Y"]
                 )
                 app.config.set_touch_orientation_index(self._orientation_idx)
-                app.config.save()
-            app.set_status(f"Orientation {self._orientation_idx + 1}/8", "info", 2)
-        except Exception:
-            app.set_status("Failed to apply orientation", "error", 3)
+                save_result = app.config.save()
+                if not save_result:
+                    logger.error(f"Config save returned False for orientation {self._orientation_idx}")
+                    app.set_status("Failed to save orientation", "error", 3)
+                    return
+            app.set_status(f"Orientation {self._orientation_idx + 1}/8 saved", "info", 2)
+        except Exception as e:
+            logger.error(f"Failed to apply orientation {self._orientation_idx}: {e}", exc_info=True)
+            app.set_status(f"Orientation error: {e}", "error", 3)
 
     def _open_calibration(self) -> None:
         self.manager.push("calibration")

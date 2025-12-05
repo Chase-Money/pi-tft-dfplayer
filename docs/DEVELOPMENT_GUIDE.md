@@ -8,7 +8,7 @@ This document consolidates all development setup, testing, troubleshooting, and 
 ```
 pi-tft-dfplayer-main/
 ├── src/
-│   ├── app.py                     # Main application (v2 framework)
+│   ├── app.py                     # Main application (ScreenManagerV2)
 │   ├── main.py                    # Entry point
 │   ├── core/                      # Configuration, state, events
 │   ├── hardware/                  # Display, touch, DFPlayer

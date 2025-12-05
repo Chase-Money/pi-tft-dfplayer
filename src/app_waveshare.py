@@ -12,19 +12,19 @@ from .core.state import ApplicationState, get_state
 
 # For backward compatibility with existing code, alias the new class
 AppState = ApplicationState
-from .backends.dfplayer_v2 import DFPlayerBackend
+from .backends.dfplayer_backend import DFPlayerBackend
 from .hardware.display_st7735 import DisplayST7735
 from .hardware.button_input import ButtonInput, Button, ButtonEvent
-from .ui.framework_v2.manager import ScreenManagerV2
-from .ui.framework_v2.events import UIEvent
+from .ui.framework.manager import ScreenManagerV2
+from .ui.framework.events import UIEvent
 
 logger = logging.getLogger(__name__)
 
 # Import the new simplified screens (we will create these next)
 # For now, let's use the old screens and see how they break
 from .ui.screens_waveshare.home_ws import HomeScreenWS
-from .ui.screens_v2.track_browser import TrackBrowserScreen
-from .ui.screens_v2.now_playing import NowPlayingScreen
+from .ui.screens.track_browser import TrackBrowserScreen
+from .ui.screens.now_playing import NowPlayingScreen
 
 
 class ApplicationWaveshare:

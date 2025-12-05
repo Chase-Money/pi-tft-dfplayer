@@ -7,6 +7,8 @@ import time
 from typing import Dict, List, Optional, Tuple
 
 from core.config import Config
+from core.application_config import ApplicationConfig
+from core.runtime_state import RuntimeState
 from core.state import get_state
 from utils.track_catalog import load_track_catalog
 from utils.metadata import load_metadata
@@ -31,10 +33,17 @@ class Application:
     # Performance constants
     TARGET_FPS = 30  # Target frame rate for UI rendering
     MAX_EVENTS_PER_FRAME = 100  # Safety limit for backend event processing
+    # Watchdog heartbeat logs at INFO level to detect freezes. Set to higher value
+    # (e.g., 300.0 for 5min) for long-running devices to reduce log spam, or disable
+    # entirely by setting to 0 (not recommended for production).
+    WATCHDOG_INTERVAL = 300.0  # Watchdog heartbeat interval in seconds (5 minutes)
 
     def __init__(self, config=None) -> None:
         self.config: Config = config or Config()
         self.config.load()
+        self.app_config = self.config.to_application_config()
+        self.runtime_state = RuntimeState()
+        self.runtime_state.hydrate_from_config(self.app_config)
 
         try:
             self.framebuffer = Framebuffer()
@@ -46,11 +55,11 @@ class Application:
             self.touch_controller = TouchController(config=self.config)
             # Load and apply calibration and orientation from config
             if self.touch_controller:
-                cal = self.config.get_touch_calibration()
+                cal = self.app_config.touch.calibration
                 self.touch_controller.set_calibration(
                     cal["min_x"], cal["max_x"], cal["min_y"], cal["max_y"]
                 )
-                orient = self.config.get_touch_orientation()
+                orient = self.app_config.touch.orientation
                 self.touch_controller.set_orientation(
                     swap_xy=orient["swap_xy"],
                     flip_x=orient["flip_x"],
@@ -68,7 +77,7 @@ class Application:
             logger.warning("DFPlayer backend failed to initialize; UI will run in demo mode")
             self.backend = None
         else:
-            volume = self.config.get_volume()
+            volume = self.app_config.audio.volume
             self.state.set_volume(volume)
             self.backend.set_volume(volume)
 
@@ -78,6 +87,8 @@ class Application:
             "state": self.state,
             "backend": self.backend,
             "config": self.config,
+            "app_config": self.app_config,
+            "runtime_state": self.runtime_state,
             "app": self,
             "renderer": None,
         }
@@ -97,16 +108,28 @@ class Application:
         self._last_dropped_count = 0
         self._last_drop_warn_ts = 0.0
 
+        # Watchdog for freeze detection
+        self._last_watchdog_time = 0.0
+        self._frame_count = 0
+
+        # Status message display
+        self._status_message: Optional[str] = None
+        self._status_level: str = "info"
+        self._status_expires_at: float = 0.0
+        self._status_changed: bool = False
+        self._status_was_visible: bool = False  # Track if status was visible last frame
+
         atexit.register(self.cleanup)
 
     def _load_tracks_and_metadata(self) -> None:
-        catalog = load_track_catalog(self.config.get_track_catalog_path())
+        catalog_path = self.app_config.paths.track_catalog or self.config.get_track_catalog_path()
+        catalog = load_track_catalog(catalog_path)
         track_dicts = self._tracks_to_dicts(catalog)
         self.state.set_tracks(track_dicts)
 
         metadata = load_metadata(
-            self.config.get_metadata_path(),
-            self.config.get_artwork_root(),
+            self.app_config.paths.metadata or self.config.get_metadata_path(),
+            self.app_config.paths.artwork_root or self.config.get_artwork_root(),
         )
         self.state.set_metadata(metadata)
 
@@ -167,6 +190,13 @@ class Application:
                     self.screen_manager.handle_event(ui_evt)
                     refreshed = True
 
+            # Check if status message visibility changed (new message or expiration)
+            status_visible = self.get_status() is not None
+            if self._status_changed or (status_visible != self._status_was_visible):
+                refreshed = True
+                self._status_changed = False
+                self._status_was_visible = status_visible
+
             if refreshed:
                 # Force full screen refresh after screen navigation to prevent artifacts
                 if self.screen_manager.needs_full_refresh():
@@ -189,6 +219,14 @@ class Application:
             else:
                 # We're behind; catch up without drifting
                 next_frame_time = now + frame_time
+
+            # Watchdog heartbeat: log periodic status to detect freezes
+            self._frame_count += 1
+            if now - self._last_watchdog_time >= self.WATCHDOG_INTERVAL:
+                fps = self._frame_count / (now - self._last_watchdog_time) if self._last_watchdog_time > 0 else 0
+                logger.info(f"[WATCHDOG] Heartbeat: {self._frame_count} frames in {now - self._last_watchdog_time:.1f}s (avg {fps:.1f} fps)")
+                self._frame_count = 0
+                self._last_watchdog_time = now
 
     def _touch_to_ui_event(self, touch_event) -> Optional[UIEvent]:
         event_type = getattr(touch_event, "type", None)
@@ -269,16 +307,24 @@ class Application:
 
     def get_status(self) -> Optional[Tuple[str, str]]:
         """Return optional status banner (message, level) for UI display."""
+        if self._status_message and time.monotonic() < self._status_expires_at:
+            return (self._status_message, self._status_level)
         return None
 
     def set_status(self, message: str, level: str = "info", timeout: int = 3) -> None:
         """
         Set temporary status message for UI display.
 
-        Currently logs the status message. Future enhancement: implement
-        a status message queue with timeout for on-screen notifications.
+        Args:
+            message: The status message to display
+            level: Message level (info, warning, error)
+            timeout: How many seconds to display the message
         """
         logger.info(f"Status [{level}]: {message}")
+        self._status_message = message
+        self._status_level = level
+        self._status_expires_at = time.monotonic() + timeout
+        self._status_changed = True
 
     def get_touch_driver_bounds(self) -> Optional[Tuple[int, int, int, int]]:
         """Get raw touch driver bounds (min_x, max_x, min_y, max_y)."""

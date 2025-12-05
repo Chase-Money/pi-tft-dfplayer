@@ -8,16 +8,25 @@ from typing import Any, Dict, Optional, Callable
 from backends.base import PlaybackBackend
 from hardware.dfplayer import DFPlayer
 from backends.robust_serial import RobustSerial
+from utils.timeout import timeout_guard, TimeoutError
 
 logger = logging.getLogger(__name__)
 
 
 class DFPlayerBackend(PlaybackBackend):
-    """Playback backend that wraps the hardware DFPlayer interface."""
+    """Playback backend that wraps the hardware DFPlayer interface.
+
+    Security: Requires access to serial port (default: /dev/serial0).
+    On multi-user systems, this requires appropriate permissions (typically root/dialout group).
+    The systemd service runs as user 'chase' with dialout group membership.
+    """
 
     DEFAULT_VOLUME = 18
     EVENT_QUEUE_SIZE = 100
     DROP_WARN_STEP = 10
+    # Timeout for serial operations - DFPlayer Mini typically responds within 100ms,
+    # but allow 2s buffer for slow SD cards or busy hardware states
+    SERIAL_TIMEOUT = 2.0
 
     def __init__(self, port: str = '/dev/serial0', baudrate: int = 9600,
                  dfplayer_factory: Optional[Callable[[str, int], DFPlayer]] = None):
@@ -102,87 +111,124 @@ class DFPlayerBackend(PlaybackBackend):
 
     # Controls ------------------------------------------------------
     def play(self):
-        with self._device_lock:
-            if self.device and self.device.is_connected:
-                try:
-                    self.device.play()
-                    with self._state_lock:
-                        self.play_pending = True
-                        self.playing = True
-                except Exception as exc:
-                    self._reset_state_on_error()
-                    logger.error(f"Failed to play: {exc}")
-                    raise
+        try:
+            with timeout_guard(self.SERIAL_TIMEOUT, "DFPlayer play"):
+                with self._device_lock:
+                    if self.device and self.device.is_connected:
+                        try:
+                            self.device.play()
+                            with self._state_lock:
+                                self.play_pending = True
+                                self.playing = True
+                        except Exception as exc:
+                            self._reset_state_on_error()
+                            logger.error(f"Failed to play: {exc}")
+                            raise
+        except TimeoutError as e:
+            logger.error(f"Play operation timed out: {e}")
+            self._reset_state_on_error()
+            raise
 
     def resume(self):
         """Alias for play() to match existing UI expectations."""
         self.play()
 
     def pause(self):
-        with self._device_lock:
-            if self.device and self.device.is_connected:
-                try:
-                    self.device.pause()
-                    with self._state_lock:
-                        self.playing = False
-                        self.play_pending = False
-                except Exception as exc:
-                    # State already False, no need to reset
-                    logger.error(f"Failed to pause: {exc}")
-                    raise
+        try:
+            with timeout_guard(self.SERIAL_TIMEOUT, "DFPlayer pause"):
+                with self._device_lock:
+                    if self.device and self.device.is_connected:
+                        try:
+                            self.device.pause()
+                            with self._state_lock:
+                                self.playing = False
+                                self.play_pending = False
+                        except Exception as exc:
+                            # Ensure consistent state on failure
+                            self._reset_state_on_error(clear_track=False)
+                            logger.error(f"Failed to pause: {exc}")
+                            raise
+        except TimeoutError as e:
+            logger.error(f"Pause operation timed out: {e}")
+            self._reset_state_on_error(clear_track=False)
+            raise
 
     def stop(self):
-        with self._device_lock:
-            if self.device and self.device.is_connected:
-                try:
-                    self.device.stop()
-                    with self._state_lock:
-                        self.playing = False
-                        self.play_pending = False
-                        self.current_track = None
-                except Exception as exc:
-                    # Ensure consistent state on failure
-                    self._reset_state_on_error(clear_track=True)
-                    logger.error(f"Failed to stop: {exc}")
-                    raise
+        try:
+            with timeout_guard(self.SERIAL_TIMEOUT, "DFPlayer stop"):
+                with self._device_lock:
+                    if self.device and self.device.is_connected:
+                        try:
+                            self.device.stop()
+                            with self._state_lock:
+                                self.playing = False
+                                self.play_pending = False
+                                self.current_track = None
+                        except Exception as exc:
+                            # Ensure consistent state on failure
+                            self._reset_state_on_error(clear_track=True)
+                            logger.error(f"Failed to stop: {exc}")
+                            raise
+        except TimeoutError as e:
+            logger.error(f"Stop operation timed out: {e}")
+            self._reset_state_on_error(clear_track=True)
+            raise
 
     def next_track(self):
-        with self._device_lock:
-            if self.device and self.device.is_connected:
-                try:
-                    self.device.next_track()
-                    with self._state_lock:
-                        self.play_pending = True
-                except Exception as exc:
-                    self._reset_state_on_error()
-                    logger.error(f"Failed to skip to next track: {exc}")
-                    raise
+        try:
+            with timeout_guard(self.SERIAL_TIMEOUT, "DFPlayer next_track"):
+                with self._device_lock:
+                    if self.device and self.device.is_connected:
+                        try:
+                            self.device.next_track()
+                            with self._state_lock:
+                                self.play_pending = True
+                        except Exception as exc:
+                            self._reset_state_on_error()
+                            logger.error(f"Failed to skip to next track: {exc}")
+                            raise
+        except TimeoutError as e:
+            logger.error(f"Next track operation timed out: {e}")
+            self._reset_state_on_error()
+            raise
 
     def prev_track(self):
-        with self._device_lock:
-            if self.device and self.device.is_connected:
-                try:
-                    self.device.prev_track()
-                    with self._state_lock:
-                        self.play_pending = True
-                except Exception as exc:
-                    self._reset_state_on_error()
-                    logger.error(f"Failed to skip to previous track: {exc}")
-                    raise
+        try:
+            with timeout_guard(self.SERIAL_TIMEOUT, "DFPlayer prev_track"):
+                with self._device_lock:
+                    if self.device and self.device.is_connected:
+                        try:
+                            self.device.prev_track()
+                            with self._state_lock:
+                                self.play_pending = True
+                        except Exception as exc:
+                            self._reset_state_on_error()
+                            logger.error(f"Failed to skip to previous track: {exc}")
+                            raise
+        except TimeoutError as e:
+            logger.error(f"Prev track operation timed out: {e}")
+            self._reset_state_on_error()
+            raise
 
     def play_track(self, track_id: Any):
         number = int(track_id)
-        with self._device_lock:
-            if self.device and self.device.is_connected:
-                try:
-                    self.device.play_track(number)
-                    with self._state_lock:
-                        self.play_pending = True  # Listener will set current_track and playing when 0x3E received
-                except Exception as exc:
-                    # Reset state on failure
-                    self._reset_state_on_error(clear_track=True)
-                    logger.error(f"Failed to play track {number}: {exc}")
-                    raise
+        try:
+            with timeout_guard(self.SERIAL_TIMEOUT, f"DFPlayer play_track {number}"):
+                with self._device_lock:
+                    if self.device and self.device.is_connected:
+                        try:
+                            self.device.play_track(number)
+                            with self._state_lock:
+                                self.play_pending = True  # Listener will set current_track and playing when 0x3E received
+                        except Exception as exc:
+                            # Reset state on failure
+                            self._reset_state_on_error(clear_track=True)
+                            logger.error(f"Failed to play track {number}: {exc}")
+                            raise
+        except TimeoutError as e:
+            logger.error(f"Play track {number} timed out: {e}")
+            self._reset_state_on_error(clear_track=True)
+            raise
 
     def set_volume(self, volume: int):
         try:
@@ -191,18 +237,23 @@ class DFPlayerBackend(PlaybackBackend):
             logger.error(f"Invalid volume value: {volume!r} ({exc})")
             return  # Ignore invalid input instead of crashing
 
-        with self._device_lock:
-            if self.device and self.device.is_connected:
-                try:
-                    self.device.set_volume(volume)
-                    with self._state_lock:
-                        self.volume_level = volume  # Update state only after successful hardware call
-                except Exception as exc:
-                    logger.error(f"Failed to set volume: {exc}")
-            else:
-                # No device connected, just update cached value
-                with self._state_lock:
-                    self.volume_level = volume
+        try:
+            with timeout_guard(self.SERIAL_TIMEOUT, "DFPlayer set_volume"):
+                with self._device_lock:
+                    if self.device and self.device.is_connected:
+                        try:
+                            self.device.set_volume(volume)
+                            with self._state_lock:
+                                self.volume_level = volume  # Update state only after successful hardware call
+                        except Exception as exc:
+                            logger.error(f"Failed to set volume: {exc}")
+                    else:
+                        # No device connected, just update cached value
+                        with self._state_lock:
+                            self.volume_level = volume
+        except TimeoutError as e:
+            logger.error(f"Set volume operation timed out: {e}")
+            # Don't raise - volume change is not critical, just log and continue
 
     # Status --------------------------------------------------------
     def get_status(self) -> Dict[str, Any]:

@@ -6,8 +6,8 @@ from typing import List
 
 from PIL import Image, ImageDraw, ImageFont
 
-from ..framework_v2.manager import ScreenView
-from ..framework_v2.events import UIEvent
+from ..framework.manager import ScreenView
+from ..framework.events import UIEvent
 
 class HomeScreenWS(ScreenView):
     name = "home_ws"
