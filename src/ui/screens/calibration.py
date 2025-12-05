@@ -213,11 +213,15 @@ class CalibrationScreen(ScreenView):
             self.manager.pop()
             return
 
-        # Now compute calibration bounds from median samples (same as before)
-        left_x = int(statistics.median([median_samples[0][0], median_samples[3][0]]))
-        right_x = int(statistics.median([median_samples[1][0], median_samples[2][0]]))
-        top_y = int(statistics.median([median_samples[0][1], median_samples[1][1]]))
-        bottom_y = int(statistics.median([median_samples[2][1], median_samples[3][1]]))
+        # Compute calibration bounds using min/max across ALL samples
+        # This works regardless of how the touch digitizer is physically mounted
+        # relative to the display (no assumptions about corner mapping)
+        all_x = [s[0] for s in median_samples]
+        all_y = [s[1] for s in median_samples]
+        left_x = min(all_x)
+        right_x = max(all_x)
+        top_y = min(all_y)
+        bottom_y = max(all_y)
 
         if right_x <= left_x:
             right_x = left_x + 1
