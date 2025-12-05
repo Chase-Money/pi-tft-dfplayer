@@ -43,24 +43,23 @@ class CalibrationScreen(ScreenView):
         width = app.framebuffer.width if app and app.framebuffer else 480
         height = app.framebuffer.height if app and app.framebuffer else 320
 
-        # Save current orientation and calibration, disable both during calibration
-        # Calibration needs raw coordinates without any transformation
+        # Save current calibration and reset to driver bounds
+        # Keep orientation active so crosshairs appear correctly for physical digitizer rotation
+        # Raw coordinates are collected separately and not affected by orientation
         if app and hasattr(app, 'get_touch_orientation'):
             self.saved_orientation = app.get_touch_orientation()
             logger.info(f"Saved orientation for calibration: {self.saved_orientation}")
 
-            # Disable orientation transform (identity transform)
+            # Keep current orientation active (don't disable) so crosshairs match display
+            # This handles cases where touch digitizer is physically rotated relative to display
             if hasattr(app, 'touch_controller') and app.touch_controller:
-                app.touch_controller.set_orientation(swap_xy=False, flip_x=False, flip_y=False)
-                logger.info("Disabled orientation transform for calibration")
-
-                # Reset calibration to hardware driver bounds for 1:1 mapping during calibration
+                # Reset calibration to hardware driver bounds for 1:1 raw coordinate mapping
                 driver_bounds = app.get_touch_driver_bounds()
                 if driver_bounds:
                     min_x, max_x, min_y, max_y = driver_bounds
                     logger.info(f"Temporarily resetting calibration to driver bounds: ({min_x}, {max_x}, {min_y}, {max_y})")
                     app.touch_controller.set_calibration(min_x, max_x, min_y, max_y)
-                    app.set_status("Calibration reset for raw touch", "info", 2)
+                    app.set_status("Calibration mode - keep orientation", "info", 2)
                 else:
                     logger.warning("Could not get driver bounds, using existing calibration")
                     app.set_status("Starting calibration", "info", 2)
@@ -309,22 +308,17 @@ class CalibrationScreen(ScreenView):
         self.manager.pop()
 
     def _restore_orientation(self) -> None:
-        """Restore the orientation settings that were saved before calibration."""
+        """Restore calibration settings after calibration completes."""
         import logging
         logger = logging.getLogger(__name__)
 
         app = self._app()
-        if not app or not self.saved_orientation:
+        if not app:
             return
 
-        if hasattr(app, 'touch_controller') and app.touch_controller:
-            app.touch_controller.set_orientation(
-                swap_xy=self.saved_orientation.get('swap_xy', False),
-                flip_x=self.saved_orientation.get('flip_x', False),
-                flip_y=self.saved_orientation.get('flip_y', False)
-            )
-            logger.info(f"Restored orientation after calibration: {self.saved_orientation}")
-            app.set_status("Orientation restored", "info", 2)
+        # Orientation was kept active during calibration, no need to restore
+        # This method is kept for compatibility but now only logs completion
+        logger.info(f"Calibration complete, orientation unchanged: {self.saved_orientation}")
 
     def _app(self):
         return self.services.get("app") if self.services else None

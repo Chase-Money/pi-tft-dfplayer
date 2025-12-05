@@ -26,3 +26,6 @@
 2025-12-02 | feature/framework-migration | Config consolidation: added typed ApplicationConfig/RuntimeState, bridged legacy Config, updated app to typed paths/volume, refreshed docs, removed deprecated dfplayer_backend | ./venv/bin/pytest -q tests/core/test_application_config_structured.py | Runtime uses src/main.py + app.py; legacy backend removed; docs aligned to unified entrypoint.
 
 2025-12-03 | docs-workflow | Added workflow requirements to AGENTS.md and CLAUDE.md: check TASK_LOG.md before actions, log activities after changes | n/a | Ensures continuity between developers working on the codebase.
+
+2025-12-05 | main | Replaced missing profile select test in CI workflow | not run | Suggested targeted pytest run after workflow update.
+
