@@ -43,7 +43,7 @@ class CalibrationScreen(ScreenView):
         width = app.framebuffer.width if app and app.framebuffer else 480
         height = app.framebuffer.height if app and app.framebuffer else 320
 
-        # Save current orientation and disable it for calibration
+        # Save current orientation and calibration, disable both during calibration
         # Calibration needs raw coordinates without any transformation
         if app and hasattr(app, 'get_touch_orientation'):
             self.saved_orientation = app.get_touch_orientation()
@@ -53,7 +53,17 @@ class CalibrationScreen(ScreenView):
             if hasattr(app, 'touch_controller') and app.touch_controller:
                 app.touch_controller.set_orientation(swap_xy=False, flip_x=False, flip_y=False)
                 logger.info("Disabled orientation transform for calibration")
-                app.set_status("Orientation disabled for calibration", "info", 2)
+
+                # Reset calibration to hardware driver bounds for 1:1 mapping during calibration
+                driver_bounds = app.get_touch_driver_bounds()
+                if driver_bounds:
+                    min_x, max_x, min_y, max_y = driver_bounds
+                    logger.info(f"Temporarily resetting calibration to driver bounds: ({min_x}, {max_x}, {min_y}, {max_y})")
+                    app.touch_controller.set_calibration(min_x, max_x, min_y, max_y)
+                    app.set_status("Calibration reset for raw touch", "info", 2)
+                else:
+                    logger.warning("Could not get driver bounds, using existing calibration")
+                    app.set_status("Starting calibration", "info", 2)
 
         # Scale offset based on screen size (40px at 480px wide, ~11px at 128px wide)
         scale = min(width / 480.0, height / 320.0)
