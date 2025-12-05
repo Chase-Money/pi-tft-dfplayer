@@ -28,7 +28,7 @@ jobs:
             tests/ui/test_widgets_v2.py \
             tests/ui/test_views_v2.py \
             tests/core/test_hardware_profile.py \
-            tests/core/test_profile_select_v2.py \
+            tests/core/test_application_config_structured.py \
             tests/core/test_state_v2.py \
             tests/hardware/test_display_st7735.py \
             tests/hardware/test_button_input.py \

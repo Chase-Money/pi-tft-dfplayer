@@ -16,6 +16,8 @@ from typing import Optional, TYPE_CHECKING
 
 from PIL import Image, ImageDraw, ImageFont
 
+from .touch_debug_overlay import TouchDebugOverlay
+
 if TYPE_CHECKING:
     from .framework.manager import ScreenManagerV2
     from ..hardware.framebuffer import Framebuffer
@@ -63,6 +65,9 @@ class FramebufferRendererV2:
 
         # Pre-load common font sizes
         self._load_default_fonts()
+
+        # Touch debug overlay
+        self.touch_debug = TouchDebugOverlay()
 
         logger.info(f"Renderer initialized: {self.width}x{self.height}")
 
@@ -158,6 +163,9 @@ class FramebufferRendererV2:
 
         # Render status message overlay (if any)
         self._render_status_message()
+
+        # Render touch debug overlay
+        self.touch_debug.render(self.draw, self._fonts.get("small"))
 
     def present(self, dirty_rects=None) -> None:
         """
@@ -272,6 +280,7 @@ class FramebufferRendererV2:
         Render status message banner at bottom of screen (if any).
 
         Gets status from the app instance via screen manager services.
+        Uses theme colors for consistency with the rest of the UI.
         """
         # Get app instance from screen manager services
         if not self.screen_manager or not hasattr(self.screen_manager, 'services'):
@@ -285,17 +294,76 @@ class FramebufferRendererV2:
         status = app.get_status()
         if not status:
             return
-
++        # Get theme colors (with fallbacks if theme not available)
++        try:
++            from ui.theme import load_theme
++            theme = load_theme(None)
++            palette = theme.palette if theme else {}
++        except Exception:
++            palette = {}
++
++        # Map status levels to theme palette keys (with hardcoded fallbacks)
++        theme_mappings = {
++            "info": ("status_info", "#2196F3"),
++            "success": ("status_good", "#4CAF50"),
++            "warning": ("status_warn", "#FF9800"),
++            "error": ("status_bad", "#F44336"),
+         }
+-        bg_color, text_color = colors.get(level, colors["info"])
++
++        theme_key, fallback = theme_mappings.get(level, ("status_info", "#2196F3"))
++        bg_color = palette.get(theme_key, fallback)
++
++        # Determine text color based on background (light text for dark bg, dark text for light bg)
++        # Use theme text color if available, otherwise choose based on background
++        try:
++            # Parse background color to determine if it\'s light or dark
++            if isinstance(bg_color, str) and bg_color.startswith('#'):
++                r, g, b = int(bg_color[1:3], 16), int(bg_color[3:5], 16), int(bg_color[5:7], 16)
++                # Use perceived luminance formula
++                luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
++                text_color = palette.get("text", "#FFFFFF") if luminance < 0.5 else palette.get("bg", "#000000")
++            else:
++                text_color = palette.get("text", "#FFFFFF")
++        except Exception:
++            text_color = "#FFFFFF"  # Safe fallback
         message, level = status
 
-        # Color scheme for different status levels
-        colors = {
-            "info": ("#2196F3", "#FFFFFF"),      # Blue background, white text
-            "warning": ("#FF9800", "#000000"),   # Orange background, black text
-            "error": ("#F44336", "#FFFFFF"),     # Red background, white text
-            "success": ("#4CAF50", "#FFFFFF"),   # Green background, white text
+        # Debug logging to track duplicate renders
+        logger.debug(f"Rendering status message: '{message}' ({level}) at banner_y={self.height - self.scale_value(30, 'height')}")
+
+        # Get theme colors (with fallbacks if theme not available)
+        try:
+            from ui.theme import load_theme
+            theme = load_theme(None)
+            palette = theme.palette if theme else {}
+        except Exception:
+            palette = {}
+
+        # Map status levels to theme palette keys (with hardcoded fallbacks)
+        theme_mappings = {
+            "info": ("status_info", "#2196F3"),
+            "success": ("status_good", "#4CAF50"),
+            "warning": ("status_warn", "#FF9800"),
+            "error": ("status_bad", "#F44336"),
         }
-        bg_color, text_color = colors.get(level, colors["info"])
+
+        theme_key, fallback = theme_mappings.get(level, ("status_info", "#2196F3"))
+        bg_color = palette.get(theme_key, fallback)
+
+        # Determine text color based on background (light text for dark bg, dark text for light bg)
+        # Use theme text color if available, otherwise choose based on background
+        try:
+            # Parse background color to determine if it's light or dark
+            if isinstance(bg_color, str) and bg_color.startswith('#'):
+                r, g, b = int(bg_color[1:3], 16), int(bg_color[3:5], 16), int(bg_color[5:7], 16)
+                # Use perceived luminance formula
+                luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+                text_color = palette.get("text", "#FFFFFF") if luminance < 0.5 else palette.get("bg", "#000000")
+            else:
+                text_color = palette.get("text", "#FFFFFF")
+        except Exception:
+            text_color = "#FFFFFF"  # Safe fallback
 
         # Position at bottom of screen
         banner_height = self.scale_value(30, "height")

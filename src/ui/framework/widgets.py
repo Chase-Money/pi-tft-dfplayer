@@ -87,22 +87,43 @@ class ButtonWidget:
                 return True
             return self._pressed  # Consume drag events while pressed
 
-        # Tap/release events: trigger action only if still pressed and in bounds
-        if event.type in ("tap", "release"):
+        # Release event: trigger action if still pressed and release is in bounds
+        # This handles case where user pressed button but finger jittered (drag detected)
+        # but release is still within button - should activate
+        if event.type == "release":
             if self._pressed:
                 self._pressed = False
                 if self._contains(pos, expand=4):
                     # User released inside button - trigger action
                     if self._debug_log:
-                        logger.debug(f"[BTN] '{label}' activated on {event.type} at {pos}, rect={self.rect}")
+                        logger.debug(f"[BTN] '{label}' activated on release at {pos}, rect={self.rect}")
                     self.on_press()
                     self._flash_until = time.monotonic() + 0.15
                     return True
                 else:
                     # User released outside button - cancel action
                     if self._debug_log:
-                        logger.debug(f"[BTN] '{label}' press cancelled by {event.type} outside bounds at {pos}")
+                        logger.debug(f"[BTN] '{label}' press cancelled by release outside bounds at {pos}")
                     return True
+            # No active press - check if this is a direct release within bounds (could activate)
+            # This handles resistive touchscreens where press might be missed but release detected
+            if self._contains(pos, expand=4):
+                if self._debug_log:
+                    logger.debug(f"[BTN] '{label}' activated on direct release at {pos}, rect={self.rect}")
+                self.on_press()
+                self._flash_until = time.monotonic() + 0.15
+                return True
+            return False
+
+        # Tap event: trigger action if in bounds (original tap behavior)
+        if event.type == "tap":
+            if self._contains(pos, expand=4):
+                self._pressed = False
+                if self._debug_log:
+                    logger.debug(f"[BTN] '{label}' activated on tap at {pos}, rect={self.rect}")
+                self.on_press()
+                self._flash_until = time.monotonic() + 0.15
+                return True
             return False
 
         return False

@@ -56,6 +56,7 @@ class HomeScreen(ScreenView):
         current_res = (w, h)
         if current_res != self._last_resolution:
             dbg = debug_tap_logging_enabled()
+            # Note: Home screen has no back button since it's the root screen
             self.buttons = [
                 ButtonWidget(
                     (margin, start_y, button_width, button_height),
@@ -77,13 +78,6 @@ class HomeScreen(ScreenView):
                 ),
             ]
             self._last_resolution = current_res
-
-        # Draw status banner if present
-        app = self._app()
-        if app:
-            status = app.get_status()
-            if status:
-                draw_status_banner(draw, status[0], w, context["fonts"], status[1])
 
         # Draw title
         draw.text((margin, title_y), "DFPlayer", font=font_large, fill=palette.text)

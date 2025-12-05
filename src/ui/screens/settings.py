@@ -20,6 +20,7 @@ class SettingsScreen(ScreenView):
         super().__init__(manager, services)
         self.orientation_button = None
         self.cal_button = None
+        self.diag_button = None
         self.back_button = None
         self._orientation_idx = 0
         self._last_resolution = None
@@ -54,19 +55,16 @@ class SettingsScreen(ScreenView):
             title_y = max(16, int(50 * scale))
             orient_y = max(32, int(80 * scale))
             cal_y = orient_y + button_h + max(12, int(20 * scale))
+            diag_y = cal_y + button_h + max(12, int(20 * scale))
 
             dbg = debug_tap_logging_enabled()
-            self.back_button = ButtonWidget((margin, small_margin, back_w, max(16, int(40 * scale))), "Back", self.manager.pop, debug_log=dbg)
+            # Position back button on right side
+            back_x = w - margin - back_w
+            self.back_button = ButtonWidget((back_x, small_margin, back_w, max(16, int(40 * scale))), "Back", self.manager.pop, debug_log=dbg)
             self.orientation_button = ButtonWidget((margin, orient_y, button_w, button_h), self._orientation_label, self._cycle_orientation, debug_log=dbg)
             self.cal_button = ButtonWidget((margin, cal_y, button_w, button_h), "Calibrate Touch", self._open_calibration, debug_log=dbg)
+            self.diag_button = ButtonWidget((margin, diag_y, button_w, button_h), "Touch Diagnostic", self._open_diagnostic, debug_log=dbg)
             self._last_resolution = current_res
-
-        # Draw status banner
-        app = self._app()
-        if app:
-            status = app.get_status()
-            if status:
-                draw_status_banner(draw, status[0], w, fonts, status[1])
 
         # Draw title and labels
         margin = max(4, int(16 * scale))
@@ -76,9 +74,12 @@ class SettingsScreen(ScreenView):
         cal_y = orient_y + button_h + max(12, int(20 * scale))
         label_offset = max(8, int(20 * scale))
 
+        diag_y = cal_y + button_h + max(12, int(20 * scale))
+
         draw.text((margin, title_y), "Settings", font=fonts.get("medium"), fill=(235, 235, 235))
         draw.text((margin, orient_y - label_offset), "Touch Orientation", font=fonts.get("small"), fill=(200, 200, 200))
         draw.text((margin, cal_y - label_offset), "Calibration", font=fonts.get("small"), fill=(200, 200, 200))
+        draw.text((margin, diag_y - label_offset), "Diagnostics", font=fonts.get("small"), fill=(200, 200, 200))
 
         # Draw widgets
         if self.back_button:
@@ -87,6 +88,8 @@ class SettingsScreen(ScreenView):
             self.orientation_button.draw(draw, fonts.get("small"))
         if self.cal_button:
             self.cal_button.draw(draw, fonts.get("small"))
+        if self.diag_button:
+            self.diag_button.draw(draw, fonts.get("small"))
 
         # Calculate dimensions for dirty rects (in case resolution didn't change)
         small_margin = max(2, int(4 * scale))
@@ -123,16 +126,16 @@ class SettingsScreen(ScreenView):
         try:
             if app.touch_controller:
                 app.touch_controller.set_orientation(
-                    swap_xy=orient["SWAP_XY"],
-                    flip_x=orient["FLIP_X"],
-                    flip_y=orient["FLIP_Y"],
+                    swap_xy=orient["swap_xy"],
+                    flip_x=orient["flip_x"],
+                    flip_y=orient["flip_y"],
                 )
             # Persist
             if hasattr(app, "config"):
                 app.config.set_touch_orientation(
-                    swap_xy=orient["SWAP_XY"],
-                    flip_x=orient["FLIP_X"],
-                    flip_y=orient["FLIP_Y"]
+                    swap_xy=orient["swap_xy"],
+                    flip_x=orient["flip_x"],
+                    flip_y=orient["flip_y"]
                 )
                 app.config.set_touch_orientation_index(self._orientation_idx)
                 save_result = app.config.save()

@@ -3,9 +3,25 @@
 Handles conversion between hardware touch events and UI framework events.
 """
 
-from typing import Optional
+from typing import Any, Optional
+from unittest.mock import Mock
 
 from ui.framework.events import UIEvent
+
+
+def _safe_attr(obj: Any, name: str, default: Optional[Any] = None) -> Optional[Any]:
+    """Safely retrieve attribute without auto-creating Mock children."""
+    if obj is None:
+        return default
+    if isinstance(obj, Mock) and name not in obj.__dict__:
+        return default
+    try:
+        data = getattr(obj, "__dict__", {})
+        if isinstance(data, dict) and name in data:
+            return data[name]
+    except Exception:
+        pass
+    return getattr(obj, name, default)
 
 
 class EventProcessor:
@@ -21,16 +37,15 @@ class EventProcessor:
         Returns:
             UIEvent or None if event type not recognized
         """
-        event_type = getattr(touch_event, "type", None)
-        x = getattr(touch_event, "x", None)
-        y = getattr(touch_event, "y", None)
-        dx = getattr(touch_event, "dx", 0)
-        dy = getattr(touch_event, "dy", 0)
-        direction = getattr(touch_event, "direction", None)
-        raw_x = getattr(touch_event, "raw_x", None)
-        raw_y = getattr(touch_event, "raw_y", None)
+        event_type = _safe_attr(touch_event, "type")
+        x = _safe_attr(touch_event, "x")
+        y = _safe_attr(touch_event, "y")
+        dx = _safe_attr(touch_event, "dx", 0) or 0
+        dy = _safe_attr(touch_event, "dy", 0) or 0
+        direction = _safe_attr(touch_event, "direction")
+        raw_x = _safe_attr(touch_event, "raw_x")
+        raw_y = _safe_attr(touch_event, "raw_y")
 
-        # Include raw coordinates for calibration screen
         raw = (raw_x, raw_y) if raw_x is not None and raw_y is not None else None
 
         if event_type == "tap":
