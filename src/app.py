@@ -238,18 +238,25 @@ class Application:
         raw_x = getattr(touch_event, "raw_x", None)
         raw_y = getattr(touch_event, "raw_y", None)
 
+        # Record touch for debug visualization
+        if x is not None and y is not None and self.renderer:
+            self.renderer.touch_debug.record_touch(x, y)
+
         # Include raw coordinates for calibration screen
         raw = (raw_x, raw_y) if raw_x is not None and raw_y is not None else None
 
         if event_type == "tap":
+            logger.info(f"[TOUCH] TAP at ({x}, {y})")
             return UIEvent("tap", {"pos": (x, y), "raw": raw})
         if event_type == "drag":
             return UIEvent("drag", {"pos": (x, y), "dx": dx, "dy": dy, "raw": raw})
         if event_type == "swipe":
             return UIEvent("swipe", {"direction": direction, "delta": max(abs(dx), abs(dy)), "raw": raw})
         if event_type == "press":
+            logger.info(f"[TOUCH] PRESS at ({x}, {y})")
             return UIEvent("press", {"pos": (x, y), "raw": raw})
         if event_type == "release":
+            logger.info(f"[TOUCH] RELEASE at ({x}, {y})")
             return UIEvent("release", {"pos": (x, y), "raw": raw})
         return None
 

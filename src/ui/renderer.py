@@ -16,6 +16,8 @@ from typing import Optional, TYPE_CHECKING
 
 from PIL import Image, ImageDraw, ImageFont
 
+from .touch_debug_overlay import TouchDebugOverlay
+
 if TYPE_CHECKING:
     from .framework.manager import ScreenManagerV2
     from ..hardware.framebuffer import Framebuffer
@@ -63,6 +65,9 @@ class FramebufferRendererV2:
 
         # Pre-load common font sizes
         self._load_default_fonts()
+
+        # Touch debug overlay
+        self.touch_debug = TouchDebugOverlay()
 
         logger.info(f"Renderer initialized: {self.width}x{self.height}")
 
@@ -158,6 +163,9 @@ class FramebufferRendererV2:
 
         # Render status message overlay (if any)
         self._render_status_message()
+
+        # Render touch debug overlay
+        self.touch_debug.render(self.draw, self._fonts.get("small"))
 
     def present(self, dirty_rects=None) -> None:
         """
