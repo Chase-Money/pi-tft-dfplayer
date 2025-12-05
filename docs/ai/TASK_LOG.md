@@ -29,3 +29,8 @@
 
 2025-12-05 | main | Replaced missing profile select test in CI workflow | not run | Suggested targeted pytest run after workflow update.
 
+2025-12-05 | feature/framework-migration | Touch calibration debugging session: Added visual debug crosshairs, attempted multiple orientation strategies (keep active vs disable), repositioned back buttons to avoid play indicator overlap, increased button spacing to prevent hit area conflicts | Hardware testing | Calibration fundamentally broken - digitizer appears physically rotated 90° but no orientation (1-8) correctly maps all 4 corners. User reports at least one aspect mirrored in all orientations after calibration. Root cause: calibration algorithm assumes standard axis alignment which doesn't match this hardware configuration.
+2025-12-05 | feature/framework-migration | Starting diagnostic mode to map touch digitizer coordinate system: Will create raw coordinate logging screen to systematically test corner mapping and determine correct transformation algorithm | Next: Hardware testing | User chose debugging approach over hardcoded values to understand root cause.
+2025-12-05 | main | Expanded touch diagnostic screen (multi-event logging, orientation/bounds display) and added unit coverage for history capping/corner mapping; targeted pytest for new file skipped (pytest not available in env) | not run (env lacks pytest) | Run `python -m pytest tests/unit/test_touch_diagnostic.py` after installing test deps.
+
+

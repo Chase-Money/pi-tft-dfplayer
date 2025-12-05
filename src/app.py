@@ -23,6 +23,7 @@ from ui.screens.track_browser import TrackBrowserScreen
 from ui.screens.now_playing import NowPlayingScreen
 from ui.screens.settings import SettingsScreen
 from ui.screens.calibration import CalibrationScreen
+from ui.screens.touch_diagnostic import TouchDiagnosticScreen
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +99,7 @@ class Application:
         self.screen_manager.register("now_playing", NowPlayingScreen)
         self.screen_manager.register("settings", SettingsScreen)
         self.screen_manager.register("calibration", CalibrationScreen)
+        self.screen_manager.register("touch_diagnostic", TouchDiagnosticScreen)
         self.screen_manager.push("home")
 
         self.renderer = FramebufferRendererV2(self.framebuffer, self.screen_manager)
