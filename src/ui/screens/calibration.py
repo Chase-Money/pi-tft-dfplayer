@@ -32,7 +32,33 @@ class CalibrationScreen(ScreenView):
         self.flash_until = 0.0  # For visual feedback on tap
         # Back button will be created in render() based on resolution
         self.back_button = None
-        # Save original orientation to restore after calibration
++        # Save current orientation and calibration, disable both during calibration
++        # This ensures raw coordinate collection works correctly regardless of digitizer rotation
++        if app and hasattr(app, 'get_touch_orientation'):
++            self.saved_orientation = app.get_touch_orientation()
++            logger.info(f"Saved orientation for calibration: {self.saved_orientation}")
++
++            # Disable orientation transform (identity) and reset calibration to hardware bounds
++            # This provides clean raw coordinates for accurate calibration
++            if hasattr(app, 'touch_controller') and app.touch_controller:
++                # Disable all orientation transforms
++                app.touch_controller.set_orientation(swap_xy=False, flip_x=False, flip_y=False)
++                logger.info("Disabled orientation transform for calibration")
++
++                # Reset calibration to hardware driver bounds for 1:1 raw coordinate mapping
++                driver_bounds = app.get_touch_driver_bounds()
++                if driver_bounds:
++                    min_x, max_x, min_y, max_y = driver_bounds
++                    logger.info(f"Temporarily resetting calibration to driver bounds: ({min_x}, {max_x}, {min_y}, {max_y})")
++                    app.touch_controller.set_calibration(min_x, max_x, min_y, max_y)
++                    app.set_status("Tap the target circles (ignore position)", "info", 3)
++                else:
++                    logger.warning("Could not get driver bounds, using existing calibration")
++                    app.set_status("Starting calibration", "info", 2)
++
+         # Scale offset based on screen size (40px at 480px wide, ~11px at 128px wide)
+         scale = min(width / 480.0, height / 320.0)
+         offset = max(10, int(TARGET_OFFSETS * scale))
         self.saved_orientation = None
 
     @property
