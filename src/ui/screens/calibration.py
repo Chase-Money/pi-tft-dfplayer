@@ -290,7 +290,7 @@ class CalibrationScreen(ScreenView):
             self.manager.pop()
             return
 
-        app.set_touch_calibration(left_x, right_x, top_y, bottom_y)
+        app.set_touch_calibration((left_x, right_x, top_y, bottom_y))
         app.set_status("Calibration saved", "success", 3)
 
         # Restore original orientation
