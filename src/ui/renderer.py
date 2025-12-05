@@ -294,7 +294,39 @@ class FramebufferRendererV2:
         status = app.get_status()
         if not status:
             return
-
++        # Get theme colors (with fallbacks if theme not available)
++        try:
++            from ui.theme import load_theme
++            theme = load_theme(None)
++            palette = theme.palette if theme else {}
++        except Exception:
++            palette = {}
++
++        # Map status levels to theme palette keys (with hardcoded fallbacks)
++        theme_mappings = {
++            "info": ("status_info", "#2196F3"),
++            "success": ("status_good", "#4CAF50"),
++            "warning": ("status_warn", "#FF9800"),
++            "error": ("status_bad", "#F44336"),
+         }
+-        bg_color, text_color = colors.get(level, colors["info"])
++
++        theme_key, fallback = theme_mappings.get(level, ("status_info", "#2196F3"))
++        bg_color = palette.get(theme_key, fallback)
++
++        # Determine text color based on background (light text for dark bg, dark text for light bg)
++        # Use theme text color if available, otherwise choose based on background
++        try:
++            # Parse background color to determine if it\'s light or dark
++            if isinstance(bg_color, str) and bg_color.startswith('#'):
++                r, g, b = int(bg_color[1:3], 16), int(bg_color[3:5], 16), int(bg_color[5:7], 16)
++                # Use perceived luminance formula
++                luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
++                text_color = palette.get("text", "#FFFFFF") if luminance < 0.5 else palette.get("bg", "#000000")
++            else:
++                text_color = palette.get("text", "#FFFFFF")
++        except Exception:
++            text_color = "#FFFFFF"  # Safe fallback
         message, level = status
 
         # Debug logging to track duplicate renders
