@@ -48,7 +48,16 @@ class RuntimeState:
         """Internal setter with type validation (assumes lock is held).
 
         Raises:
-            KeyError: If key is not in _VALID_KEYS schema
+        # Validate key is known (strict policy for type safety)
+         if key not in self._VALID_KEYS:
+-            logger.warning(f"Setting unknown runtime state key: {key}")
+-            self._data[key] = value
+-            return
++            logger.error(f"Attempted to set unknown runtime state key: {key}")
++            raise KeyError(f"Unknown runtime state key: {key}. Valid keys: {sorted(self._VALID_KEYS.keys())}")
+ 
+         # Validate type matches expected
+         expected_type = self._VALID_KEYS[key]
             TypeError: If value type doesn't match expected type
             ValueError: If value is out of valid range
         """
