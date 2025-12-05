@@ -23,6 +23,7 @@ class RuntimeState:
         "ui_theme": str,
         "screen_brightness": int,
         "touch_thresholds": dict,
+        "backend": str,
     }
 
     def __init__(self) -> None:

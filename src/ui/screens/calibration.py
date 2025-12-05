@@ -27,12 +27,21 @@ class CalibrationScreen(ScreenView):
         self.samples: List[List[Tuple[int, int]]] = []  # List of sample lists, one per target
         self.stage = 0
         self.sample_count = 0  # Samples collected for current target
+        self.current_target = 0
         self.message = "Tap the highlighted points"
         self.flash_until = 0.0  # For visual feedback on tap
         # Back button will be created in render() based on resolution
         self.back_button = None
         # Save original orientation to restore after calibration
         self.saved_orientation = None
+
+    @property
+    def current_target(self) -> int:
+        return self.stage
+
+    @current_target.setter
+    def current_target(self, value: int) -> None:
+        self.stage = value
 
     # ------------------------------------------------------------------
     def on_enter(self, **kwargs):
@@ -78,6 +87,7 @@ class CalibrationScreen(ScreenView):
         ]
         self.samples = [[] for _ in self.targets]  # List of sample lists
         self.stage = 0
+        self.current_target = 0
         self.sample_count = 0
         self.message = f"Tap each target {SAMPLES_PER_TARGET} times"
 

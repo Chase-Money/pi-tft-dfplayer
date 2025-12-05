@@ -58,7 +58,7 @@ def _validate_artwork_path(artwork_path: str, base_dir: str) -> Optional[str]:
             resolved_str = str(resolved)
 
             # For absolute paths, ensure they're in common safe directories
-            allowed_absolute_prefixes = ["/boot/", "/home/", "/media/", "/mnt/"]
+            allowed_absolute_prefixes = ["/boot/", "/home/", "/media/", "/mnt/", "/tmp/"]
             path_is_safe = any(
                 resolved_str.startswith(prefix) for prefix in allowed_absolute_prefixes
             )
@@ -72,18 +72,11 @@ def _validate_artwork_path(artwork_path: str, base_dir: str) -> Optional[str]:
             logger.debug(f"Validated absolute artwork path: {resolved_str}")
             return resolved_str
 
-        # Relative path - must stay within base_dir
-        # First check for obvious traversal attempts
-        if artwork_path.startswith('..') or '/../' in artwork_path or artwork_path.endswith('/..'):
-            logger.warning(f"Path traversal attempt detected: {artwork_path}")
-            return None
-
-        # Resolve relative to base_dir
+        # Relative path - must stay within base_dir after normalization
         base_path = Path(base_dir).resolve()
         full_path = (base_path / artwork_path).resolve()
         full_path_str = str(full_path)
 
-        # Ensure resolved path is within base_dir (using pathlib.is_relative_to would be cleaner in Python 3.9+)
         base_str = str(base_path)
         if not base_str.endswith(os.sep):
             base_str += os.sep

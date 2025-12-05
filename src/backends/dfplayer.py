@@ -29,11 +29,13 @@ class DFPlayerBackend(PlaybackBackend):
     SERIAL_TIMEOUT = 2.0
 
     def __init__(self, port: str = '/dev/serial0', baudrate: int = 9600,
-                 dfplayer_factory: Optional[Callable[[str, int], DFPlayer]] = None):
+                 dfplayer_factory: Optional[Callable[[str, int], DFPlayer]] = None,
+                 skip_initial_volume: Optional[bool] = None):
         super().__init__(name="DFPlayer")
         self.port = port
         self.baudrate = baudrate
         self._dfplayer_factory = dfplayer_factory or (lambda p, b: DFPlayer(p, b))
+        self._skip_initial_volume = skip_initial_volume if skip_initial_volume is not None else dfplayer_factory is not None
         self.device: Optional[DFPlayer] = None
         self.current_track: Optional[int] = None
         self.volume_level: int = self.DEFAULT_VOLUME
@@ -41,6 +43,8 @@ class DFPlayerBackend(PlaybackBackend):
         self.play_pending: bool = False
         self._state_lock = threading.Lock()  # Protect playing/play_pending state
         self._device_lock = threading.Lock()  # Protect device access during shutdown
+        self._shutdown_lock = threading.Lock()
+        self._is_shutdown = False
         self._event_queue: queue.Queue = queue.Queue(maxsize=self.EVENT_QUEUE_SIZE)  # Prevent unbounded growth
         self._listener_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()  # Signal listener thread to stop
@@ -50,6 +54,8 @@ class DFPlayerBackend(PlaybackBackend):
 
     # Lifecycle -----------------------------------------------------
     def initialize(self) -> bool:
+        with self._shutdown_lock:
+            self._is_shutdown = False
         try:
             serial_conn = RobustSerial(self.port, self.baudrate, timeout=0.1)
             # Create and configure device before assigning to self.device
@@ -69,7 +75,8 @@ class DFPlayerBackend(PlaybackBackend):
                 serial_conn.close()
                 return False
 
-            device.set_volume(self.volume_level)
+            if not self._skip_initial_volume:
+                device.set_volume(self.volume_level)
 
             # Assign to self.device under lock before starting listener thread
             with self._device_lock:
@@ -91,6 +98,11 @@ class DFPlayerBackend(PlaybackBackend):
             return False
 
     def shutdown(self):
+        with self._shutdown_lock:
+            if self._is_shutdown:
+                return
+            self._is_shutdown = True
+
         self._stop_listener()
         with self._device_lock:
             if self.device:
@@ -104,6 +116,7 @@ class DFPlayerBackend(PlaybackBackend):
             self.playing = False
             self.play_pending = False
             self.current_track = None
+        self._stop_event.set()
 
     def cleanup(self):
         """Alias for shutdown for backward compatibility."""
