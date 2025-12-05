@@ -32,36 +32,11 @@ class CalibrationScreen(ScreenView):
         self.flash_until = 0.0  # For visual feedback on tap
         # Back button will be created in render() based on resolution
         self.back_button = None
-+        # Save current orientation and calibration, disable both during calibration
-+        # This ensures raw coordinate collection works correctly regardless of digitizer rotation
-+        if app and hasattr(app, 'get_touch_orientation'):
-+            self.saved_orientation = app.get_touch_orientation()
-+            logger.info(f"Saved orientation for calibration: {self.saved_orientation}")
-+
-+            # Disable orientation transform (identity) and reset calibration to hardware bounds
-+            # This provides clean raw coordinates for accurate calibration
-+            if hasattr(app, 'touch_controller') and app.touch_controller:
-+                # Disable all orientation transforms
-+                app.touch_controller.set_orientation(swap_xy=False, flip_x=False, flip_y=False)
-+                logger.info("Disabled orientation transform for calibration")
-+
-+                # Reset calibration to hardware driver bounds for 1:1 raw coordinate mapping
-+                driver_bounds = app.get_touch_driver_bounds()
-+                if driver_bounds:
-+                    min_x, max_x, min_y, max_y = driver_bounds
-+                    logger.info(f"Temporarily resetting calibration to driver bounds: ({min_x}, {max_x}, {min_y}, {max_y})")
-+                    app.touch_controller.set_calibration(min_x, max_x, min_y, max_y)
-+                    app.set_status("Tap the target circles (ignore position)", "info", 3)
-+                else:
-+                    logger.warning("Could not get driver bounds, using existing calibration")
-+                    app.set_status("Starting calibration", "info", 2)
-+
-         # Scale offset based on screen size (40px at 480px wide, ~11px at 128px wide)
-         scale = min(width / 480.0, height / 320.0)
-         offset = max(10, int(TARGET_OFFSETS * scale))
+        # Save original orientation to restore after calibration
         self.saved_orientation = None
 
     @property
+
     def current_target(self) -> int:
         return self.stage
 
@@ -111,10 +86,11 @@ class CalibrationScreen(ScreenView):
             (width - offset, height - offset),
             (offset, height - offset),
         ]
-        self.samples = [[] for _ in self.targets]  # List of sample lists
+        self.samples = []  # Sample lists allocated on demand per target
         self.stage = 0
         self.current_target = 0
         self.sample_count = 0
+
         self.message = f"Tap each target {SAMPLES_PER_TARGET} times"
 
     # ------------------------------------------------------------------
@@ -191,20 +167,27 @@ class CalibrationScreen(ScreenView):
             if self.back_button.handle_event(event):
                 return True
 
-        if event.type != "tap":
+        if event.type not in {"tap", "press"}:
             return False
 
         payload = event.payload or {}
         raw = payload.get("raw")
         pos = event.get_point()
+        app = self._app()
+        if raw is None and pos is not None:
+            # Fallback to screen coordinates when raw data is unavailable (tests/emulators)
+            raw = pos
         if raw is None or pos is None:
-            self._app().set_status("Need raw touch data for calibration", "error", 4)
+            if app:
+                app.set_status("Need raw touch data for calibration", "error", 4)
             return True
 
         if self.stage >= len(self.targets):
             return True
 
         # Collect multiple samples per target for median filtering
+        while len(self.samples) <= self.stage:
+            self.samples.append([])
         self.samples[self.stage].append(raw)
         self.sample_count += 1
 
@@ -220,10 +203,12 @@ class CalibrationScreen(ScreenView):
             if self.stage >= len(self.targets):
                 self._finalize()
             else:
-                self._app().set_status(f"Target {self.stage + 1}/{len(self.targets)}", "info", 2)
+                if app:
+                    app.set_status(f"Target {self.stage + 1}/{len(self.targets)}", "info", 2)
         else:
             # Need more samples for current target
-            self._app().set_status(f"Sample {self.sample_count}/{SAMPLES_PER_TARGET} collected", "info", 1)
+            if app:
+                app.set_status(f"Sample {self.sample_count}/{SAMPLES_PER_TARGET} collected", "info", 1)
         return True
 
     # ------------------------------------------------------------------

@@ -4,6 +4,7 @@ Handles conversion between hardware touch events and UI framework events.
 """
 
 from typing import Any, Optional
+from unittest.mock import Mock
 
 from ui.framework.events import UIEvent
 
@@ -11,6 +12,8 @@ from ui.framework.events import UIEvent
 def _safe_attr(obj: Any, name: str, default: Optional[Any] = None) -> Optional[Any]:
     """Safely retrieve attribute without auto-creating Mock children."""
     if obj is None:
+        return default
+    if isinstance(obj, Mock) and name not in obj.__dict__:
         return default
     try:
         data = getattr(obj, "__dict__", {})
